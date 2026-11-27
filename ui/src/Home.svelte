@@ -62,7 +62,7 @@
       </span>{/if}
       {#if view.at}<button class="chip" class:on={view.compare} onclick={() => view.compare = !view.compare}>{view.compare ? "Comparing with now" : "Compare with now"}</button><button class="chip" onclick={() => {view.at = null; view.compare = false}}>Back to now<kbd>Esc</kbd></button>{/if}
       <span class="faint checked">{snap.scan.running ? (snap.scan.retrying ? "Asking again the ones that didn't answer…" : `Checking… ${snap.scan.done} of ${snap.scan.total}`) : checkedAt ? `Checked ${ago(checkedAt, view.now)}` : "Not checked yet"}</span>
-      <button class="chip" disabled={!snap.radio.up || snap.scan.running} onclick={() => act("rescan").then(() => toast("Map checked", null))}>Check now</button>
+      <button class="chip" disabled={!snap.radio.up || snap.scan.running} onclick={() => act("rescan").then(result => result?.already ? toast("Already checking", null) : result?.silent?.length ? toast(`Map checked. ${result.silent.join(", ")} didn't answer, so ${result.silent.length === 1 ? "its" : "their"} routes are the last known ones.`, null, "bad") : toast("Map checked", null)).catch(() => {})}>Check now</button>
     </div>
     <div class="mapwrap">
       {#if !checkedAt && !view.at && devices.length}

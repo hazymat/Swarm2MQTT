@@ -117,7 +117,7 @@ export class SimRadio extends Radio {
   async groupSet(groupId: number, values: Record<string, unknown>) {}
   async sceneStore() {}
   async sceneRecall() {}
-  async checkFirmware(ieee: string) {return ieee.endsWith("103")}
+  async checkFirmware(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee); if (device?.kind === "battery") await new Promise(resolve => setTimeout(resolve, 7000)); /* asleep until its next check-in */ return ieee.endsWith("103") ? true : ieee.endsWith("101") ? null : false}
   async updateFirmware(ieee: string, progress: (percent: number, secondsLeft?: number) => void) {for (let percent = 0; percent <= 100; percent += 10) {progress(percent, (100 - percent) * 3); await new Promise(resolve => setTimeout(resolve, 400))} const device = this.devices.find(candidate => candidate.ieee === ieee); if (device) device.firmware = "1.0.4"}
   async scanChannels() {return {15: 40, 20: 12, 25: 25}}
 }

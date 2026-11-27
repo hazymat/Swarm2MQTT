@@ -81,7 +81,7 @@ export class App extends EventEmitter {
     const radio: Radio = this.sim ? new SimRadio() : new HerdsmanRadio(this.stick!, this.dataDir);
     this.radio = radio;
     radio.on("status", status => {this.setRadioStatus(status); if (!status.up && radio === this.radio) this.retryRadio()});
-    radio.on("state", (ieee, values, lqi) => this.onState(ieee, values, lqi));
+    radio.on("state", (ieee, values, lqi, assumed) => this.onState(ieee, values, lqi, assumed));
     radio.on("heard", ieee => this.onHeard(ieee));
     radio.on("joinStep", (ieee, step) => this.joinWatch.step(ieee, step));
     radio.on("joinFailed", (ieee, error) => this.joinWatch.fail(ieee, this.joinWatch.reports.get(ieee)?.failing?.step ?? "identified", error ?? "no answer"));
@@ -126,11 +126,11 @@ export class App extends EventEmitter {
   uniqueTopic(base: string, except?: string) {const topics = new Set(this.store.devices().filter(device => device.ieee !== except).map(device => device.topic).concat(this.store.groups().map(group => group.topic))); let topic = base, count = 2; while (topics.has(topic) || topic === "bridge") topic = `${base}_${count++}`; return topic}
 
   onHeard(ieee: string) {this.retryJoin(ieee); const device = this.store.device(ieee); if (!device) return; addGap(device, Date.now()); this.store.saveDevice(device); this.availabilityChanged(device)}
-  onState(ieee: string, values: Record<string, unknown>, lqi?: number) {
+  onState(ieee: string, values: Record<string, unknown>, lqi?: number, assumed = false) {
     const device = this.store.device(ieee);
     if (!device) return;
     if (lqi !== undefined) values = Object.assign({}, values, {linkquality: lqi});
-    addGap(device, Date.now());
+    if (!assumed) addGap(device, Date.now()); // a value assumed from a command we sent isn't the device being heard
     Object.assign(device.state, values);
     this.store.saveDevice(device);
     this.store.record(ieee, values);
@@ -210,7 +210,8 @@ export class App extends EventEmitter {
   }
   scheduleScan(delay = LINK_SCAN_MS) {clearTimeout(this.scanTimer); this.scanTimer = setTimeout(() => this.scanNow().finally(() => {const soon = this.scanSoon; this.scanSoon = false; this.scheduleScan(soon ? 120e3 : LINK_SCAN_MS)}), delay)} // devices found during a check get their own links drawn 2 minutes later
   async scanNow() {
-    if (!this.radio || !this.radioStatus.up || this.scan.running) return;
+    if (!this.radio || !this.radioStatus.up) throw new Error("The adapter isn't connected, so there's no one to ask.");
+    if (this.scan.running) return {already: true};
     this.scan = {running: true, startedAt: Date.now(), done: 0, total: 0, answered: [], silent: [], finishedAt: this.scan.finishedAt}; this.changed();
     try {
       const links = await this.radio.scanLinks(step => {Object.assign(this.scan, step); this.changed()}), before = this.parents(), now = Date.now();
@@ -220,8 +221,8 @@ export class App extends EventEmitter {
       this.store.saveLinks(links, now); this.scan.finishedAt = Date.now(); this.store.put("lastScan", this.scan.finishedAt);
       const silentNames = this.scan.silent.map(ieee => this.store.device(ieee)?.name ?? "The adapter"); if (silentNames.length) this.log("warn", `${silentNames.join(", ")} didn't answer when asked who it hears, even when asked again. ${silentNames.length === 1 ? "It" : "They"} may be off or out of reach. The map keeps the routes through ${silentNames.length === 1 ? "it" : "them"} from the last check, dashed.`);
       for (const link of links) {const old = before.get(link.child); if (old && old !== link.parent) {const name = (ieee: string) => this.store.device(ieee)?.name ?? "the adapter"; this.log("info", `${name(link.child)} now talks through ${name(link.parent)} instead of ${name(old)}.`, link.child)}}
-      this.changed();
-    } catch (error) {this.log("warn", "Couldn't finish checking who talks through whom. Will try again later.", undefined, String(error))}
+      this.changed(); return {silent: silentNames};
+    } catch (error) {this.log("warn", "Couldn't finish checking who talks through whom. Will try again later.", undefined, String(error)); throw new Error("Couldn't finish checking the map. It will try again later.")}
     finally {this.scan.running = false; this.scan.asking = undefined; this.changed()}
   }
 
@@ -354,7 +355,22 @@ export class App extends EventEmitter {
   }
   async deleteGroup(id: number) {const group = this.store.groups().find(existing => existing.id === id); if (!group) return; await this.applyGroup(id, null); return this.pushUndo(`Deleted group "${group.name}"`, {op: "group", id, group: null}, {op: "group", id, group})}
   renameGroup(id: number, name: string) {const group = this.store.groups().find(existing => existing.id === id)!, before = structuredClone(group); group.name = name.trim(); group.topic = this.uniqueTopic(slug(group.name)); this.store.saveGroup(group); this.changed(); return this.pushUndo(`Renamed group to "${group.name}"`, {op: "group", id, group}, {op: "group", id, group: before})}
-  async groupSet(id: number, values: Record<string, unknown>) {const group = this.store.groups().find(existing => existing.id === id); if (!group) throw new Error("That group isn't known."); await this.requireRadio().groupSet(id, values); this.mqtt.group(group, values)}
+  // group commands get no answer of their own: after sending, each member is asked for its value, so the result says who really changed
+  async confirmMembers(memberIeees: string[], expected: (ieee: string) => Record<string, unknown> | undefined, sentAt: number) {
+    const name = (ieee: string) => this.store.device(ieee)?.name ?? ieee, matches = (want: Record<string, unknown>, have: Record<string, unknown>) => Object.entries(want).every(([key, value]) => typeof value === "number" ? Math.abs(Number(have[key]) - value) <= 3 : String(have[key]).toUpperCase() === String(value).toUpperCase());
+    const checked = memberIeees.filter(ieee => {const device = this.store.device(ieee), want = expected(ieee); return device && device.kind !== "battery" && want && Object.keys(want).length && Object.keys(want).every(key => key in (device.state ?? {}))});
+    await Promise.all(checked.map(ieee => this.radio?.readBack(ieee, Object.keys(expected(ieee)!)).catch(() => {})));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const done = checked.filter(ieee => {const device = this.store.device(ieee)!; return (device.last_seen ?? 0) >= sentAt && matches(expected(ieee)!, device.state ?? {})});
+    return {total: checked.length, done: done.map(name), missing: checked.filter(ieee => !done.includes(ieee)).map(name)};
+  }
+  async groupSet(id: number, values: Record<string, unknown>) {
+    const group = this.store.groups().find(existing => existing.id === id); if (!group) throw new Error("That group isn't known.");
+    const sentAt = Date.now();
+    try {await this.requireRadio().groupSet(id, values)} catch (error) {throw new Error(translate(String((error as Error).message)).text)}
+    this.mqtt.group(group, values);
+    return this.confirmMembers(group.members, () => values, sentAt);
+  }
   async saveScene(groupId: number, name: string) {
     const states: Record<string, Record<string, unknown>> = {}, group = this.store.groups().find(existing => existing.id === groupId)!;
     for (const ieee of group.members) states[ieee] = structuredClone(this.store.device(ieee)?.state ?? {});
@@ -363,7 +379,14 @@ export class App extends EventEmitter {
     this.store.saveScene(scene); this.changed();
     return this.pushUndo(`Saved scene "${scene.name}"`, {op: "scene", id: scene.id, scene}, {op: "scene", id: scene.id, scene: null});
   }
-  async recallScene(id: number) {const scene = this.store.scenes().find(existing => existing.id === id); if (!scene) throw new Error("That scene isn't known."); await this.requireRadio().sceneRecall(scene.group_id, scene.id); this.log("info", `Scene "${scene.name}" on.`)}
+  async recallScene(id: number) {
+    const scene = this.store.scenes().find(existing => existing.id === id); if (!scene) throw new Error("That scene isn't known.");
+    const sentAt = Date.now();
+    try {await this.requireRadio().sceneRecall(scene.group_id, scene.id)} catch (error) {throw new Error(translate(String((error as Error).message)).text)}
+    this.log("info", `Scene "${scene.name}" on.`);
+    const pick = (state: Record<string, unknown> | undefined) => {if (!state) return undefined; const want: Record<string, unknown> = {}; for (const key of ["state", "brightness"]) if (key in state) want[key] = state[key]; if (want.state === "OFF") delete want.brightness; return want};
+    return this.confirmMembers(Object.keys(scene.states), ieee => pick(scene.states[ieee]), sentAt);
+  }
   deleteScene(id: number) {const scene = this.store.scenes().find(existing => existing.id === id); if (!scene) return; this.store.deleteScene(id); this.changed(); return this.pushUndo(`Deleted scene "${scene.name}"`, {op: "scene", id, scene: null}, {op: "scene", id, scene})}
   // direct control: a switch bound to a light or group works with the server or MQTT down
   async bind(from: string, to: string, remove = false) {
@@ -374,12 +397,24 @@ export class App extends EventEmitter {
     return this.pushUndo(remove ? `${fromName} no longer controls ${toName}` : `${fromName} now controls ${toName}`, {op: "bind", from, to, remove}, {op: "bind", from, to, remove: !remove});
   }
   // firmware: one tap per device, never automatic
-  async checkFirmware(ieee: string) {const available = await this.requireRadio().checkFirmware(ieee); this.applyDevice(ieee, {update_available: available}); return available}
+  // a device that doesn't answer gets told apart from one with nothing new: battery devices only listen when awake
+  firmwareError(device: DeviceRow, error: unknown): Error {
+    const text = String((error as any)?.message ?? error);
+    if (/didn't respond|timeout|timed out|no response/i.test(text)) return new Error(device.kind === "battery" ? `${device.name} didn't answer. It sleeps between reports: press its button to wake it, then try again.` : `${device.name} didn't answer. Check it has power, then try again.`);
+    if (/no endpoint/i.test(text)) return new Error(`${device.name} can't take firmware updates over Zigbee.`);
+    if (/already in progress/i.test(text)) return new Error(`${device.name} is already updating.`);
+    return new Error(`Couldn't check ${device.name}: ${translate(text).text}`);
+  }
+  async checkFirmware(ieee: string) {
+    const device = this.need(ieee);
+    try {const available = await this.requireRadio().checkFirmware(ieee); this.applyDevice(ieee, {update_available: !!available}); return available}
+    catch (error) {this.log("warn", `Checking ${device.name} for a firmware update didn't work.`, ieee, String(error)); throw this.firmwareError(device, error)}
+  }
   async updateFirmware(ieee: string) {
     const device = this.need(ieee);
     this.firmwareProgress.set(ieee, {percent: 0}); this.changed();
     try {await this.requireRadio().updateFirmware(ieee, (percent, secondsLeft) => {this.firmwareProgress.set(ieee, {percent, secondsLeft}); this.changed()}); this.log("info", `${device.name} firmware updated.`, ieee); this.applyDevice(ieee, {update_available: false}); setTimeout(() => this.syncDevices(), 5000)}
-    catch (error) {this.log("warn", `${device.name} firmware update didn't finish. The device keeps its old firmware.`, ieee, String(error)); throw new Error("The update didn't finish. The device keeps its old firmware.")}
+    catch (error) {const started = (this.firmwareProgress.get(ieee)?.percent ?? 0) > 0; this.log("warn", `${device.name} firmware update ${started ? "didn't finish" : "didn't start"}. It keeps its old firmware.`, ieee, String(error)); throw started ? new Error(`The update didn't finish. ${device.name} keeps its old firmware.`) : this.firmwareError(device, error)}
     finally {this.firmwareProgress.delete(ieee); this.changed()}
   }
 
@@ -399,8 +434,15 @@ export class App extends EventEmitter {
 
   // ---------- undo / redo, server side so Ctrl+Z works from any page ----------
   pushUndo(label: string, forward: Op, backward: Op) {const id = this.store.pushUndo(label, forward, backward); this.emit("toast", {id, label}); this.changed(); return {undoId: id, label}}
-  async undo() {const entry = this.store.lastUndo(false); if (!entry) return; await this.apply(entry.backward); this.store.markUndo(entry.id, true); this.emit("toast", {label: `Undone: ${entry.label}`}); this.changed()}
-  async redo() {const entry = this.store.lastUndo(true); if (!entry) return; await this.apply(entry.forward); this.store.markUndo(entry.id, false); this.emit("toast", {label: `Redone: ${entry.label}`}); this.changed()}
+  async undo(quiet = false) {const entry = this.store.lastUndo(false); if (!entry) throw new Error("Nothing to undo."); try {await this.apply(entry.backward)} catch (error) {throw new Error(`Couldn't undo "${entry.label}": ${(error as Error).message}`)} this.store.markUndo(entry.id, true); if (!quiet) this.emit("toast", {label: `Undone: ${entry.label}`}); this.changed(); return entry}
+  async redo(quiet = false) {const entry = this.store.lastUndo(true); if (!entry) throw new Error("Nothing to redo."); try {await this.apply(entry.forward)} catch (error) {throw new Error(`Couldn't redo "${entry.label}": ${(error as Error).message}`)} this.store.markUndo(entry.id, false); if (!quiet) this.emit("toast", {label: `Redone: ${entry.label}`}); this.changed(); return entry}
+  // undo history: step back to just before a change (undoing it and everything after), or forward again to include it; stops at the first step that can't be done, and says so
+  async undoTo(id: number) {
+    let steps = 0, entry = this.store.lastUndo(false), mode = entry && entry.id >= id ? "undo" : "redo";
+    if (mode === "undo") while (entry && entry.id >= id) {await this.undo(true); steps++; entry = this.store.lastUndo(false)}
+    else {entry = this.store.lastUndo(true); while (entry && entry.id <= id) {await this.redo(true); steps++; entry = this.store.lastUndo(true)}}
+    return {mode, steps};
+  }
   async apply(op: Op) {
     if (op.op === "device") this.applyDevice(op.ieee, op.fields);
     if (op.op === "setting") this.applySetting(op.key, op.value);
@@ -478,9 +520,9 @@ export class App extends EventEmitter {
       join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia, moving: this.moving && this.moving.until > Date.now() ? this.moving : undefined},
       // how each recent join went, with the verdict in plain words (names filled in)
       joinReports: Array.from(this.joinWatch.reports.values()).map(report => Object.assign({}, report, {verdict: diagnose(report, ieee => ieee ? this.store.device(ieee)?.name ?? ieee : "the adapter")})),
-      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
+      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, ota: this.radio?.canUpdateFirmware(device.ieee) ?? false, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
       stickIeee: this.stickIeee(), links: latest, scan: Object.assign({}, this.scan, {finishedAt: this.scan.finishedAt ?? this.store.get<number | undefined>("lastScan", undefined)}), groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),
-      undo: this.store.undoList(30), changes: this.meshChanges(), backups: this.backups().map(entry => ({name: entry.name, ts: entry.ts, reason: entry.reason})),
+      undo: this.store.undoList(300), changes: this.meshChanges(), backups: this.backups().map(entry => ({name: entry.name, ts: entry.ts, reason: entry.reason})),
     };
   }
   // moments the mesh changed: snapshot times where some device's parent differs from the snapshot before

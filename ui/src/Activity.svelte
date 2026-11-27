@@ -4,6 +4,10 @@
   import {dayClock, STATUS_COLOUR} from "./util.js";
   let snap = $derived(live.snap);
   let tab = $state(view.page === "history" ? "changes" : "log");
+  $effect(() => {if (view.page === "history") tab = "changes"});
+  // stepping through undo history: an entry that's done can be stepped back to (it and everything after are undone); an undone one can be stepped forward to
+  let here = $derived(snap.undo.find(entry => !entry.undone)?.id ?? 0);
+  function stepTo(entry) {act("undoTo", {id: entry.id}).then(result => toast(result.steps ? `${result.mode === "undo" ? "Undid" : "Redid"} ${result.steps} change${result.steps === 1 ? "" : "s"}` : "Already there", null)).catch(() => {})}
   let device = $state(""), technical = $state(false);
   let events = $derived(live.events.filter(event => !device || event.ieee === device));
   const LEVEL = {info: "var(--faint)", warn: STATUS_COLOUR.warn, bad: STATUS_COLOUR.bad};
@@ -13,7 +17,7 @@
   function copy() {const text = events.map(event => `${new Date(event.ts).toISOString()} ${event.level.toUpperCase()} ${event.text}${event.tech ? "\n  " + event.tech : ""}`).join("\n"); navigator.clipboard?.writeText(text).then(() => toast("Copied", null))}
 </script>
 <div class="activity">
-  <div class="tabs"><button class:on={tab === "log"} onclick={() => tab = "log"}>What happened</button><button class:on={tab === "changes"} onclick={() => tab = "changes"}>Your changes</button></div>
+  <div class="tabs"><button class:on={tab === "log"} onclick={() => tab = "log"}>What happened</button><button class:on={tab === "changes"} onclick={() => tab = "changes"}>Undo history</button></div>
   {#if tab === "log"}
     <div class="filters">
       <select class="text" bind:value={device}><option value="">All devices</option>{#each snap.devices as candidate}<option value={candidate.ieee}>{candidate.name}</option>{/each}</select>
@@ -33,10 +37,14 @@
     <p class="faint keep">Kept for 30 days, like all history.</p>
   {:else}
     <div class="filters"><button class="chip" onclick={undo}>Undo<kbd>Ctrl Z</kbd></button><button class="chip" onclick={redo}>Redo<kbd>Ctrl Y</kbd></button></div>
-    <div class="list">
-      {#each snap.undo as entry (entry.id)}<div class="entry" class:undone={entry.undone}><span class="when faint">{dayClock(entry.ts)}</span><span class="what">{entry.label}{#if entry.undone} <span class="faint">(undone)</span>{/if}</span></div>
+    <div class="list timeline">
+      {#each snap.undo as entry (entry.id)}
+        {#if entry.id === here && snap.undo.some(other => other.undone)}<div class="here">You are here</div>{/if}
+        <button class="entry step" class:undone={entry.undone} onclick={() => stepTo(entry)} title={entry.undone ? "Redo up to here" : "Undo back to before this"}><span class="when faint">{dayClock(entry.ts)}</span><span class="what">{entry.label}{#if entry.hand && !entry.undone} <span class="faint">· undoing it needs you to press the device's button</span>{/if}</span><span class="act faint">{entry.undone ? "Redo to here" : "Undo to here"}</span></button>
       {:else}<div class="empty">Changes you make show here, newest first.</div>{/each}
+      {#if snap.undo.length && !here}<div class="here">You are here: everything above is undone</div>{/if}
     </div>
+    <p class="faint keep">Kept for 30 days.</p>
   {/if}
 </div>
 <style>
@@ -48,10 +56,13 @@
   .entry{display:flex;gap:12px;align-items:baseline;padding:8px 12px;border-radius:12px;text-align:left}
   button.entry:hover{background:var(--glass)}
   .entry.undone{opacity:.5}
+  .step .act{font-size:12.5px;opacity:0}.step:hover .act,.step:focus-visible .act{opacity:1}
+  .here{font-size:12.5px;color:var(--accent);padding:4px 12px;border-top:2px solid var(--accent);margin:2px 0}
+  .small{font-size:13px}
   .when{flex:none;width:110px;font-size:13px}
   .what{flex:1;min-width:0}
   .tech{display:block;margin-top:4px;font-size:12px;white-space:pre-wrap}
   .more{align-self:center;margin-top:8px}
   .keep{font-size:13px}
-  @media (max-width:700px){.activity{padding:12px}.when{width:70px}}
+  @media (max-width:700px){.activity{padding:12px}.when{width:70px}.step .act{opacity:1}}
 </style>

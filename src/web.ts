@@ -90,6 +90,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "updateNow": return app.updateNow();
     case "undo": return app.undo();
     case "redo": return app.redo();
+    case "undoTo": return app.undoTo(Number(args.id));
     case "events": return app.store.events(args.before, args.limit ?? 200, args.ieee);
     case "history": return app.store.history(args.ieee, args.key, args.since);
     case "topology": return app.store.linksAt(args.ts);

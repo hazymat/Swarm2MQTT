@@ -6,6 +6,13 @@
   let nameOf = ieee => snap.devices.find(device => device.ieee === ieee)?.name ?? ieee;
   let editing = $state(null), draft = $state(""), adding = $state(null), sceneName = $state({});
   function save(group) {editing = null; if (draft.trim() && draft !== group.name) act("groupRename", {id: group.id, name: draft})}
+  // group commands get no answer of their own: the service asks each member afterwards, and this says who really changed
+  function outcome(what, result) {
+    if (!result?.total) return toast(`${what}: sent. Its devices don't say whether it worked.`, null);
+    if (!result.missing.length) return toast(`${what}: ${result.total === 1 ? result.done[0] : `all ${result.total}`} done`, null);
+    toast(`${what}: ${result.done.length} of ${result.total} done. ${result.missing.join(", ")} didn't confirm.`, null, result.done.length ? "info" : "bad");
+  }
+  const groupSet = (group, values, what) => act("groupSet", {id: group.id, values}).then(result => outcome(what, result)).catch(() => {});
   let candidates = group => snap.devices.filter(device => device.status === "accepted" && device.kind === "router" && !group.members.includes(device.ieee));
 </script>
 <div class="groups">
@@ -17,18 +24,18 @@
         {:else}<button class="name" onclick={() => {editing = group.id; draft = group.name}}>{group.name}</button>{/if}
         <code class="faint">{snap.mqtt.settings.baseTopic}/{group.topic}</code>
         <span class="acts">
-          <button class="pill" style="background:var(--mint)" disabled={!snap.radio.up} onclick={() => act("groupSet", {id: group.id, values: {state: "ON"}})}>On</button>
-          <button class="pill ghost" disabled={!snap.radio.up} onclick={() => act("groupSet", {id: group.id, values: {state: "OFF"}})}>Off</button>
+          <button class="pill" style="background:var(--mint)" disabled={!snap.radio.up} onclick={() => groupSet(group, {state: "ON"}, `${group.name} on`)}>On</button>
+          <button class="pill ghost" disabled={!snap.radio.up} onclick={() => groupSet(group, {state: "OFF"}, `${group.name} off`)}>Off</button>
         </span>
       </div>
-      <input type="range" min="0" max="254" value="180" title="Brightness" onchange={event => act("groupSet", {id: group.id, values: {brightness: Number(event.currentTarget.value)}})}>
+      <input type="range" min="0" max="254" value="180" title="Brightness" onchange={event => groupSet(group, {brightness: Number(event.currentTarget.value)}, `${group.name} brightness`)}>
       <div class="members">
         {#each group.members as ieee}{@const device = snap.devices.find(candidate => candidate.ieee === ieee)}<span class="chip member">{#if device}<Pic {device} size={22}/>{/if}{nameOf(ieee)}<button onclick={() => act("groupMember", {id: group.id, ieee, remove: true})} title="Take out of the group">✕</button></span>{/each}
         {#if adding === group.id}{#each candidates(group) as device}<button class="chip" onclick={() => act("groupMember", {id: group.id, ieee: device.ieee})}>+ {device.name}</button>{/each}<button class="chip" onclick={() => adding = null}>Done</button>
         {:else}<button class="chip add" onclick={() => adding = group.id}>+ Add devices</button>{/if}
       </div>
       <div class="scenes">
-        {#each scenes as scene (scene.id)}<span class="scene"><button class="pill" style="background:var(--lilac)" onclick={() => act("sceneRecall", {id: scene.id})}>{scene.name}</button><button class="x" title="Delete scene" onclick={() => act("sceneDelete", {id: scene.id})}>✕</button></span>{/each}
+        {#each scenes as scene (scene.id)}<span class="scene"><button class="pill" style="background:var(--lilac)" onclick={() => act("sceneRecall", {id: scene.id}).then(result => outcome(`Scene ${scene.name}`, result)).catch(() => {})}>{scene.name}</button><button class="x" title="Delete scene" onclick={() => act("sceneDelete", {id: scene.id})}>✕</button></span>{/each}
         <span class="savescene"><input class="text" placeholder="Scene name" bind:value={sceneName[group.id]}><button class="pill ghost" disabled={!group.members.length || !snap.radio.up} onclick={() => {act("sceneSave", {groupId: group.id, name: sceneName[group.id] ?? ""}); sceneName[group.id] = ""}}>Save what's on now</button></span>
       </div>
       <button class="link" onclick={() => act("groupDelete", {id: group.id})}>Delete group</button>

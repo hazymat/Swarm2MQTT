@@ -11,7 +11,7 @@ export interface ScanProgress {asking?: string; done: number; total: number; ans
 export interface RadioStatus {up: boolean; reason?: string; stick?: string; channel?: number; panId?: number; connecting?: boolean; since?: number; attempts?: number; lastError?: string; nextTry?: number; log?: string[]}
 export interface RadioEvents {
   status: [RadioStatus];
-  state: [ieee: string, values: Record<string, unknown>, lqi?: number];
+  state: [ieee: string, values: Record<string, unknown>, lqi?: number, assumed?: boolean];
   joined: [ieee: string];
   interview: [ieee: string, status: "started" | "successful" | "failed"];
   left: [ieee: string];
@@ -39,9 +39,11 @@ export abstract class Radio extends EventEmitter<RadioEvents> {
   abstract bind(fromIeee: string, toIeee: string | number, unbind?: boolean): Promise<void>;
   abstract groupAdd(groupId: number, ieee: string, remove?: boolean): Promise<void>;
   abstract groupSet(groupId: number, values: Record<string, unknown>): Promise<void>;
+  async readBack(ieee: string, keys: string[]): Promise<void> {} // ask a device for its current values, so a result is confirmed, not assumed
   abstract sceneStore(groupId: number, sceneId: number): Promise<void>;
   abstract sceneRecall(groupId: number, sceneId: number): Promise<void>;
-  abstract checkFirmware(ieee: string): Promise<boolean>;
+  abstract checkFirmware(ieee: string): Promise<boolean | null>; // null: no firmware published for this model
+  canUpdateFirmware(ieee: string): boolean {return true}
   abstract updateFirmware(ieee: string, progress: (percent: number, secondsLeft?: number) => void): Promise<void>;
   abstract scanChannels(): Promise<Record<number, number>>;
 }

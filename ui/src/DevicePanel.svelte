@@ -82,7 +82,7 @@
       <b>Start it again</b>
       <span class="muted small">Joined {dayClock(device.added_at)}{device.last_seen ? ` · last heard ${ago(device.last_seen, view.now)}` : device.rssi != null ? "" : " · never heard"}{device.rssi != null ? ` · ${device.rssi} dBm` : ""}</span>
       <ol><li>Remove it: it's taken off the network and out of the adapter.</li><li>Reset it: usually hold its button for 5 to 10 seconds until it blinks.</li><li>It joins again from scratch, step by step.</li></ol>
-      <div class="acts"><button class="pill primary" onclick={() => {const ieee = device.ieee, name = device.name; view.open = null; toast(`Starting ${name} again`, null, "info", () => act("startAgain", {ieee}).then(() => toast("Now reset it: hold its button until it blinks", null)).catch(() => {}))}}>Remove and add again</button>{#if !joinReport?.verdict}<button class="pill ghost" onclick={() => act("joinAgain", {ieee: device.ieee}).catch(() => {})}>Just ask it again</button>{/if}</div>
+      <div class="acts"><button class="pill primary" onclick={() => {const ieee = device.ieee, name = device.name; view.open = null; toast(`Starting ${name} again`, null, "info", () => act("startAgain", {ieee}).then(() => toast("Now reset it: hold its button until it blinks", null)).catch(() => {}))}}>Remove and add again</button>{#if !joinReport?.verdict}<button class="pill ghost" onclick={() => act("joinAgain", {ieee: device.ieee}).then(() => toast(`${device.name} answered`, null)).catch(() => {})}>Just ask it again</button>{/if}</div>
     </div>{/if}
   {#if device.kind !== "router" && device.status === "accepted" && device.model && plugs.length}
     <div class="kv move"><span class="k">Talks through</span><span>{nameOfIeee(device.parent)}</span><select class="text" value="" onchange={event => {const via = event.currentTarget.value; event.currentTarget.value = ""; if (via) act("moveTo", {ieee: device.ieee, via}).catch(() => {})}}><option value="">Move it to…</option>{#each plugs as plug (plug.ieee)}<option value={plug.ieee}>{plug.name}</option>{/each}</select></div>
@@ -147,7 +147,7 @@
       {:else}<p class="small">{#if health.checkIns.typicalMs}Usually reports every {duration(health.checkIns.typicalMs)} (learnt from {health.checkIns.samples} check-ins).{/if} Counted offline after <b>{duration(health.checkIns.offlineAfterMs)}</b> of silence.</p>{/if}
       <Spark points={health.checkIns.recentGaps.map((gap, index) => ({ts: index, value: gap}))} bars height={34} colour="var(--sky)" label="Recent gaps between check-ins"/>
       <div class="kv"><span class="k">Offline after</span>
-        {#if health.checkIns.source === "override"}<button class="link" onclick={() => act("offlineAfter", {ieee: device.ieee, ms: null})}>Learn it again</button>
+        {#if health.checkIns.source === "override"}<button class="link" onclick={() => act("offlineAfter", {ieee: device.ieee, ms: null}).then(() => toast("Learning its check-ins again", null)).catch(() => {})}>Learn it again</button>
         {:else}<span class="override"><input class="text num" bind:value={overrideDraft}><span class="muted">min</span><button class="link" disabled={!Number(overrideDraft)} onclick={() => {act("offlineAfter", {ieee: device.ieee, ms: Number(overrideDraft) * 60e3}); overrideDraft = ""}}>Set</button></span>{/if}
       </div>
     </div>
@@ -169,7 +169,7 @@
       </div>
       <div class="code"><code>{device.format !== "values" ? JSON.stringify(preview) : Object.entries(preview).map(([key, value]) => `${base}/${device.topic}/${key} → ${JSON.stringify(value)}`).join("\n")}</code></div>
       <button class="link" onclick={() => moreRenames = !moreRenames}>{moreRenames ? "Done renaming fields" : "Rename fields"}</button>
-      {#if moreRenames}{#each Object.keys(device.state) as key}<div class="kv"><span class="k">{key}</span><input class="text half" placeholder={key} bind:value={renames[key]} onchange={() => act("renames", {ieee: device.ieee, renames: $state.snapshot(renames)})}></div>{/each}{/if}
+      {#if moreRenames}{#each Object.keys(device.state) as key}<div class="kv"><span class="k">{key}</span><input class="text half" placeholder={key} bind:value={renames[key]} onchange={() => act("renames", {ieee: device.ieee, renames: $state.snapshot(renames)}).then(() => toast("Saved", null)).catch(() => {})}></div>{/each}{/if}
     </div>
   {/if}
 
@@ -181,12 +181,13 @@
     </div>
   {/if}
 
-  <div class="box">
+  {#if device.ota}<div class="box">
     <h3>Firmware <span class="faint">{device.firmware ?? "version unknown"}</span></h3>
-    {#if fw}<div class="progress"><i style="width:{fw.percent}%"></i></div><p class="small">Updating… {Math.round(fw.percent)}%{fw.secondsLeft ? `, about ${duration(fw.secondsLeft * 1000)} left` : ""}. Keep it powered.</p>
-    {:else if device.update_available}<div class="kv"><span><span class="dot" style="background:var(--blue)"></span> Update available</span><button class="pill primary" onclick={() => act("firmwareUpdate", {ieee: device.ieee}).catch(() => {})}>Update now</button></div>
-    {:else}<button class="link" disabled={!snap.radio.up} onclick={() => act("firmwareCheck", {ieee: device.ieee}).then(available => toast(available ? "An update is available." : "It's up to date.", null)).catch(() => {})}>Check for an update</button>{/if}
-  </div>
+    {#if fw && fw.percent > 0}<div class="progress"><i style="width:{fw.percent}%"></i></div><p class="small">Updating… {Math.round(fw.percent)}%{fw.secondsLeft ? `, about ${duration(fw.secondsLeft * 1000)} left` : ""}. Keep it powered.</p>
+    {:else if fw}<div class="progress waiting"><i></i></div><p class="small">Asking it to start the update…{device.kind === "battery" ? " Press its button to wake it." : ""}</p>
+    {:else if device.update_available}<div class="kv"><span><span class="dot" style="background:var(--blue)"></span> Update available</span><button class="pill primary" disabled={!snap.radio.up} onclick={() => act("firmwareUpdate", {ieee: device.ieee}).then(() => toast(`${device.name} updated`, null)).catch(() => {})}>Update now</button></div>
+    {:else}<button class="link" disabled={!snap.radio.up} onclick={() => act("firmwareCheck", {ieee: device.ieee}).then(available => toast(available ? "An update is available." : available === false ? "It's up to date." : "No firmware updates are published for this model.", null)).catch(() => {})}>Check for an update</button>{/if}
+  </div>{/if}
 
   <button class="link" onclick={() => moreDetails = !moreDetails}>{moreDetails ? "Hide details" : "Details"}</button>
   {#if moreDetails}

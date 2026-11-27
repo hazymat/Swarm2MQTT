@@ -2,6 +2,8 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 31, text: "Undo history: Activity > Undo history (also in Settings) lists your changes. Click one to go back to before it, or an undone one to bring it back. Ctrl+Z undoes, Ctrl+Y redoes, and both say so when there's nothing left.", go: "history"},
+  {id: 30, text: "Every button shows it was pressed and pulses while it waits. If a device takes a while, it says what it's waiting for, and for a battery device, to press its button to wake it. Group and scene buttons check each light afterwards and say which ones didn't change. Firmware only shows on devices that can take updates.", go: "home"},
   {id: 29, text: "With an Ember adapter, the map keeps itself up to date from normal traffic: when a device starts talking through a different plug, the map changes straight away, without a check. A plug that misses a check is asked again 30 seconds later, and if it still doesn't answer, its routes stay on the map, dashed, as last known.", go: "home"},
   {id: 28, text: "A device's page shows the signal of each hop on its route. If a device talks through a plug, its own signal is its link to that plug, and the page says when the weak link is the plug's own.", go: "home"},
   {id: 27, text: "The network map starts fitted to your devices. Zoom with the mouse wheel or by pinching, drag empty space to move around, and press Fit to go back.", go: "home"},

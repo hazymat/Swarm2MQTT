@@ -170,9 +170,9 @@ export class HerdsmanRadio extends Radio {
     for (const [key, value] of Object.entries(values)) {
       const converter = definition.toZigbee?.find((candidate: any) => candidate.convertSet && (!candidate.key || candidate.key.includes(key)));
       if (!converter) throw new Error(`"${key}" can't be changed on this device`);
-      const meta = {message: values, device, mapped: definition, options: {}, state, endpoint_name: undefined, publish: (payload: Record<string, unknown>) => this.emit("state", ieee, payload), deviceExposesChanged: () => {}};
+      const meta = {message: values, device, mapped: definition, options: {}, state, endpoint_name: undefined, publish: (payload: Record<string, unknown>) => this.emit("state", ieee, payload, undefined, true), deviceExposesChanged: () => {}};
       const result = await converter.convertSet(endpoint, key, value, meta);
-      if (result?.state) {Object.assign(state, result.state); this.emit("state", ieee, result.state)}
+      if (result?.state) {Object.assign(state, result.state); this.emit("state", ieee, result.state, undefined, true)} // assumed from what was sent, not heard from the device
     }
     this.states.set(ieee, state);
   }
@@ -224,6 +224,10 @@ export class HerdsmanRadio extends Radio {
     }
   }
   async groupAdd(groupId: number, ieee: string, remove = false) {const group = this.controller!.getGroupByID(groupId) ?? this.controller!.createGroup(groupId), endpoint = this.device(ieee).getEndpoint(1)!; if (remove) await endpoint.removeFromGroup(group); else await endpoint.addToGroup(group)}
+  async readBack(ieee: string, keys: string[]) {
+    const device = this.device(ieee), definition = this.definitions.get(ieee), endpoint = device.getEndpoint(1) ?? device.endpoints[0];
+    for (const key of keys) {const converter = definition?.toZigbee?.find((candidate: any) => candidate.convertGet && (!candidate.key || candidate.key.includes(key))); if (converter) await Promise.race([converter.convertGet(endpoint, key, {message: {[key]: ""}, device, mapped: definition, options: {}, state: this.states.get(ieee) ?? {}, endpoint_name: undefined}), new Promise((_, reject) => setTimeout(() => reject(new Error("no answer")), 5000))])}
+  }
   async groupSet(groupId: number, values: Record<string, unknown>) {
     const group = this.controller!.getGroupByID(groupId);
     if (!group) throw new Error("Group not found");
@@ -233,7 +237,8 @@ export class HerdsmanRadio extends Radio {
   async sceneStore(groupId: number, sceneId: number) {await this.controller!.getGroupByID(groupId)!.command("genScenes", "store", {groupid: groupId, sceneid: sceneId}, {})}
   async sceneRecall(groupId: number, sceneId: number) {await this.controller!.getGroupByID(groupId)!.command("genScenes", "recall", {groupid: groupId, sceneid: sceneId}, {})}
   otaMetas(ieee: string) {const ota = this.definitions.get(ieee)?.ota; return typeof ota === "object" ? ota : {}}
-  async checkFirmware(ieee: string) {const result = await this.device(ieee).checkOta({}, undefined, this.otaMetas(ieee)); return result.available}
+  canUpdateFirmware(ieee: string) {return !!this.definitions.get(ieee)?.ota && !!this.controller?.getDeviceByIeeeAddr(ieee)?.endpoints.some((endpoint: any) => endpoint.supportsOutputCluster("genOta"))}
+  async checkFirmware(ieee: string) {const result = await this.device(ieee).checkOta({}, undefined, this.otaMetas(ieee)); return result.availableMeta ? result.available : null}
   async updateFirmware(ieee: string, progress: (percent: number, secondsLeft?: number) => void) {await this.device(ieee).updateOta({}, undefined, undefined, this.otaMetas(ieee), (percent, remaining) => progress(percent, remaining), OTA_SETTINGS)}
   // energy scan isn't exposed by herdsman for every adapter; without it the channel is left to the default list (§12)
   async scanChannels(): Promise<Record<number, number>> {return {}}

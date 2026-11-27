@@ -10,7 +10,7 @@
   let bars = $derived(rssi === undefined ? 0 : rssi > -65 ? 4 : rssi > -75 ? 3 : rssi > -82 ? 2 : 1);
   let via = $derived(report.parent ? snap.devices.find(device => device.ieee === report.parent)?.name ?? report.parent : "the adapter");
   let trying = $state(false);
-  async function again() {trying = true; try {await act("joinAgain", {ieee: report.ieee})} catch (error) {toast(error.message, null, "bad")} trying = false}
+  async function again() {trying = true; try {await act("joinAgain", {ieee: report.ieee})} catch {} trying = false}
 </script>
 <div class="join" class:compact>
   <ol class="track">

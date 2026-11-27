@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forw
   pushUndo(label: string, forward: unknown, backward: unknown): number {this.db.prepare("DELETE FROM undo WHERE undone=1").run(); return Number(this.db.prepare("INSERT INTO undo(ts,label,forward,backward) VALUES(?,?,?,?)").run(Date.now(), label, JSON.stringify(forward), JSON.stringify(backward)).lastInsertRowid)}
   lastUndo(undone: boolean): any {const row: any = this.db.prepare(`SELECT * FROM undo WHERE undone=? ORDER BY id ${undone ? "ASC" : "DESC"} LIMIT 1`).get(undone ? 1 : 0); return row && Object.assign(row, {forward: JSON.parse(row.forward), backward: JSON.parse(row.backward)})}
   markUndo(id: number, undone: boolean) {this.db.prepare("UPDATE undo SET undone=? WHERE id=?").run(undone ? 1 : 0, id)}
-  undoList(limit = 50) {return this.db.prepare("SELECT id,ts,label,undone FROM undo ORDER BY id DESC LIMIT ?").all(limit)}
+  // hand: undoing it needs the person (a removed device only comes back when its button is pressed)
+  undoList(limit = 50) {return this.db.prepare("SELECT id,ts,label,undone,json_extract(backward,'$.op')='rejoin' hand FROM undo ORDER BY id DESC LIMIT ?").all(limit)}
   // everything older than 30 days goes
   prune() {const cutoff = Date.now() - HISTORY_DAYS * 864e5; for (const table of ["history", "links", "events", "undo"]) this.db.prepare(`DELETE FROM ${table} WHERE ts<?`).run(cutoff); this.db.prepare("DELETE FROM events WHERE id <= (SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET ?)").run(EVENTS_KEPT)}
 }
