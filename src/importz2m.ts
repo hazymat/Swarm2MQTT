@@ -75,7 +75,7 @@ export async function fetchZ2mBackup(server: {url: string; username?: string; pa
         if (topic.endsWith("/health_check")) {answered.health = true; return}
         if (topic.endsWith("/bridge/logging")) {if (/error|warn/.test(reply.level ?? "") || /backup/i.test(reply.message ?? "")) said.push(String(reply.message).slice(0, 200)); return}
         clearTimeout(timer);
-        if (reply.status === "ok" && reply.data?.zip) resolve(reply.data.zip); else reject(new Error(`Zigbee2MQTT couldn't make its backup. It said: "${reply.error ?? "no backup in its answer"}". Try again, or drop its files instead.`));
+        if (reply.status === "ok" && reply.data?.zip) resolve(reply.data.zip); else reject(new Error(backupFailed(reply.error)));
       });
       client.on("connect", () => client.subscribe([`${baseTopic}/bridge/response/backup`, `${baseTopic}/bridge/response/health_check`, `${baseTopic}/bridge/logging`], () => client.publish(`${baseTopic}/bridge/request/backup`, "")));
     });
@@ -85,4 +85,10 @@ export async function fetchZ2mBackup(server: {url: string; username?: string; pa
     if (!picked["configuration.yaml"] || !picked["database.db"]) throw new Error("Zigbee2MQTT's backup arrived, but without its settings or device list. Drop its files instead.");
     return picked;
   } finally {client.end(true)}
+}
+
+// Zigbee2MQTT's backup walks every file in its data folder (logs too, before leaving them out). A shortcut that loops back, or a folder with a huge number of files, overflows that walk.
+function backupFailed(said?: string): string {
+  if (/call stack/i.test(said ?? "")) return `Zigbee2MQTT couldn't make its backup: something in its data folder trips it up. It reads every file there, old logs included, and a shortcut (symlink) or a folder with a huge number of files makes it give up. Move that out of its data folder and try again, or drop its files instead.`;
+  return `Zigbee2MQTT couldn't make its backup. It said: "${said ?? "no backup in its answer"}". Try again, or drop its files instead.`;
 }
