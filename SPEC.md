@@ -62,9 +62,9 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 | P24 | **Adding devices is one obvious button** | "Disable join (All)" with a mystery dropdown | One "Add devices" button. While open, a beacon pulses on the stick and on every listening router, with a countdown and a helper: "Your network key is being handed out. Don't leave this on." |
 | P25 | **The UI teaches Zigbee** | "Show me visually or contextually" | Routers, battery devices and the stick have different shapes on the map. Lines show who talks through whom. Hover a term once and it explains itself. |
 | P26 | **Groups that make sense** | "What is a group? Why might I want one?" | Groups page leads with "Turn several lights on together, instantly, with no popcorn effect." Creating one starts from selecting devices on the map. |
-| P27 | **Four menu items, not fourteen** | Eight top items + cog + sub-tabs + sub-sub-tabs | Top level: Home, Groups, Activity, Settings. No second row of tabs anywhere. |
+| P27 | **Four menu items, not fourteen** | Eight top items + cog + sub-tabs + sub-sub-tabs | Home, Groups, Activity, Settings: a sidebar on a computer, a bar at the bottom on a phone. No second row of tabs anywhere. |
 | P28 | **Advanced stays out of the way** | Blocklist, adapter delay, extended PAN ID next to everyday settings | Niche options live under one collapsed "Advanced" section at the bottom of Settings. |
-| P29 | **Looks like it was designed** | "Crappy looking UI" | Mockups approved by Mat before any UI is built. Follows the house DESIGN.md. |
+| P29 | **Looks like it was designed** | "Crappy looking UI" | Built on the same look and behaviour as Sift and Quizaroo (§3.0). Mockups approved by Mat before any UI is built. |
 
 ### Everything you had before
 
@@ -100,6 +100,21 @@ Swarm2MQTT service (Node + TypeScript, always running)
 ---
 
 ## 3. Screens
+
+### 3.0 Look and behaviour: the same as Sift and Quizaroo
+
+Swarm2MQTT copies Sift's and Quizaroo's patterns rather than inventing new ones. Where this list is silent, do what Sift's `docs/ui-consistency.md` says.
+
+- **Look:** Quizaroo's Glass theme (and its Light theme): navy gradient, glass cards with soft borders and big rounded corners, pastel tinted pills, light-weight page title with its icon, 👁 View and ⋯ top right, a round + top right (here: Add devices).
+- **Frame:** sidebar on a computer (Home, Groups, Activity, Settings at the bottom), each with its own pastel tint when active. On a phone the same four sit in a bar at the bottom, re-ordered by press, hold and drag as in Sift.
+- **Undo everything:** every change shows a pill at the bottom with what happened, **Undo**, and a small doughnut that empties as its time runs out. Ctrl+Z / Ctrl+Shift+Z undo and redo after the pill has gone. Activity keeps the whole history, each entry with its own Undo.
+- **Changes that reach a device are undone for real:** a rename, room, group, MQTT topic or device setting is put back on the device. Removing a device waits until its pill's doughnut runs out before telling the device to leave, so Undo never needs re-pairing.
+- **Choosing several:** press and hold a device (in the list or on the map) to choose it: an accent ring around it, and the selection bar rises at the bottom. While any are chosen, a tap adds or removes one; Shift+click a run. Ctrl/⌘+click with a mouse.
+- **Selection bar** (Sift's): ✕ Esc first, the count, then actions with their keys: Add to group, Move to room ▸, Fix, Remove D. Toasts stack above it, never under.
+- **Dragging:** hold a device row: it wiggles, lifts with a shadow and a slight tilt, the others slide aside, and a dashed slot shows where it lands. The list keeps Your order. On the map, dragging a device moves it and the map remembers where.
+- **Keys:** shown on buttons (hidden on touch screens). ↑ ↓ move through the list, Enter opens, Esc closes, / searches, J opens Add devices.
+- **Phone:** Home has Map | Devices as underlined tabs. Tapping a device opens its page; swipe sideways to go back.
+- **Hints:** first-run callouts with their own ✕ (Sift's `hintHtml`), never paragraphs of help text.
 
 ### 3.1 Setup wizard (first run, or Settings > Start again)
 1. **Your stick.** Lists plugged-in sticks by name ("Sonoff ZBDongle-E"). One click. "Mine isn't listed" shows unplug/replug hint.
