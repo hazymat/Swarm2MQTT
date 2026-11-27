@@ -204,7 +204,7 @@ The translation table is a file in the repo. Any error without an entry shows "S
 ## 8. Reused, and credit
 
 - **zigbee-herdsman** and **zigbee-herdsman-converters** (both MIT, maintained by Koen Kanters and the Zigbee2MQTT community). Used as npm dependencies, unmodified. Credited in About and README. Device-support fixes go upstream to converters, not into a private fork.
-- **Device pictures** are published on zigbee2mqtt.io, whose repo is GPL-3.0. Open question: link to them at runtime, or ask for permission to bundle. Not copied until decided.
+- **Device pictures** are loaded from zigbee2mqtt.io the first time a device appears, then cached locally so they still show offline. Not bundled in the app or repo (that site's repo is GPL-3.0). A generic shape (plug, bulb, sensor, switch) shows until the picture arrives or if it can't be fetched.
 - **Zigbee2MQTT itself** (GPL-3.0): no code copied. Its data-folder format is read for import only.
 - Name must not include "zigbee2mqtt".
 
@@ -235,6 +235,6 @@ Rejected: Plainbee, Zigview, Zigherd, ZigMQTT (and any Zig- name), BeeMQTT, Zigb
 
 ---
 
-## 12. Open questions for Mat
+## 12. Open questions
 
-1. Device pictures: link to zigbee2mqtt.io or ask permission to bundle.
+None right now.
