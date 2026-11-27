@@ -89,11 +89,12 @@ export class App extends EventEmitter {
     radio.on("delivery", (ieee, ok) => this.joinWatch.delivered(ieee, ok));
     radio.on("joinInfo", (ieee, info) => {this.moved(ieee, info.parent); if (this.joinWatch.watching(ieee) || this.joinEndsAt > Date.now()) this.joinWatch.set(ieee, info)});
     radio.on("stray", ieee => {this.strays.add(ieee); this.scanSoon = true});
+    radio.on("route", (path, lastHopLqi) => this.routeSeen(path, lastHopLqi));
     radio.on("joined", ieee => this.onJoined(ieee));
     radio.on("interview", (ieee, status) => this.onInterview(ieee, status));
     radio.on("left", ieee => {const device = this.store.device(ieee); if (device) this.log("warn", `${device.name} left the network.`, ieee)});
     radio.on("permitJoin", seconds => {this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()});
-    radio.start().then(() => {if (this.stick?.formNew) this.store.put("stick", Object.assign({}, this.stick, {formNew: undefined})); /* formed: from now on it never leaves its network by itself */ this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(5000); this.pingRouters()}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
+    radio.start().then(() => {if (this.stick?.formNew) this.store.put("stick", Object.assign({}, this.stick, {formNew: undefined})); /* formed: from now on it never leaves its network by itself */ this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(60e3) /* let the network settle after a restart before asking routers who they hear */; this.pingRouters()}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
   }
   retryRadio() {
     clearTimeout(this.retryTimer); clearTimeout(this.scanTimer);
@@ -195,14 +196,29 @@ export class App extends EventEmitter {
       try {await this.radio.ping(device.ieee); this.onHeard(device.ieee); this.changed()} catch {}
     }
   }
+  // a path reported by normal traffic (device, plugs it went through, adapter): updates the map the moment a route changes, and firms up links carried over from a plug that missed a check
+  routeSeen(path: string[], lastHopLqi: number) {
+    const latest = this.store.linksAt(), byChild = new Map(latest.links.map(link => [link.child, link])), now = Date.now(), name = (ieee: string) => this.store.device(ieee)?.name ?? "the adapter";
+    let changed = false;
+    for (let index = 0; index < path.length - 1; index++) {
+      const child = path[index], parent = path[index + 1], old = byChild.get(child), last = index === path.length - 2;
+      if (old?.parent === parent && old.seen >= latest.ts) continue;
+      if (old && old.parent !== parent && this.store.device(child)) this.log("info", `${name(child)} now talks through ${name(parent)} instead of ${name(old.parent)}.`, child);
+      byChild.set(child, {child, parent, lqi: last ? lastHopLqi : old?.parent === parent ? old.lqi : undefined, seen: now}); changed = true;
+    }
+    if (changed) {for (const link of byChild.values()) if (link.seen >= latest.ts) link.seen = now; /* still current, not carried over */ this.store.saveLinks(Array.from(byChild.values()), now); this.changed()}
+  }
   scheduleScan(delay = LINK_SCAN_MS) {clearTimeout(this.scanTimer); this.scanTimer = setTimeout(() => this.scanNow().finally(() => {const soon = this.scanSoon; this.scanSoon = false; this.scheduleScan(soon ? 120e3 : LINK_SCAN_MS)}), delay)} // devices found during a check get their own links drawn 2 minutes later
   async scanNow() {
     if (!this.radio || !this.radioStatus.up || this.scan.running) return;
     this.scan = {running: true, startedAt: Date.now(), done: 0, total: 0, answered: [], silent: [], finishedAt: this.scan.finishedAt}; this.changed();
     try {
-      const links = await this.radio.scanLinks(step => {Object.assign(this.scan, step); this.changed()}), before = this.parents();
-      this.store.saveLinks(links); this.scan.finishedAt = Date.now(); this.store.put("lastScan", this.scan.finishedAt);
-      const silent = this.scan.silent.map(ieee => this.store.device(ieee)?.name ?? "The adapter"); if (silent.length) this.log("warn", `${silent.join(", ")} didn't answer when asked who it hears. ${silent.length === 1 ? "It" : "They"} may be off or out of reach.`);
+      const links = await this.radio.scanLinks(step => {Object.assign(this.scan, step); this.changed()}), before = this.parents(), now = Date.now();
+      // a router that didn't answer keeps its own route and the routes through it from the last check, marked with when they were last seen (up to a day)
+      const silent = new Set(this.scan.silent), found = new Set(links.map(link => link.child));
+      for (const link of this.store.linksAt().links) if ((silent.has(link.parent) || silent.has(link.child)) && !found.has(link.child) && now - link.seen < 864e5) {links.push({child: link.child, parent: link.parent, lqi: link.lqi, seen: link.seen}); found.add(link.child)}
+      this.store.saveLinks(links, now); this.scan.finishedAt = Date.now(); this.store.put("lastScan", this.scan.finishedAt);
+      const silentNames = this.scan.silent.map(ieee => this.store.device(ieee)?.name ?? "The adapter"); if (silentNames.length) this.log("warn", `${silentNames.join(", ")} didn't answer when asked who it hears, even when asked again. ${silentNames.length === 1 ? "It" : "They"} may be off or out of reach. The map keeps the routes through ${silentNames.length === 1 ? "it" : "them"} from the last check, dashed.`);
       for (const link of links) {const old = before.get(link.child); if (old && old !== link.parent) {const name = (ieee: string) => this.store.device(ieee)?.name ?? "the adapter"; this.log("info", `${name(link.child)} now talks through ${name(link.parent)} instead of ${name(old)}.`, link.child)}}
       this.changed();
     } catch (error) {this.log("warn", "Couldn't finish checking who talks through whom. Will try again later.", undefined, String(error))}

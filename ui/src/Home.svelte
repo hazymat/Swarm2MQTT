@@ -1,7 +1,7 @@
 <script>
   import {live, act, call, toast, undo} from "./api.svelte.js";
   import {view, toggleChosen, seeHint} from "./ui.svelte.js";
-  import {STATUS_COLOUR, ago, dayClock, deviceBars, holdable, makeModel} from "./util.js";
+  import {STATUS_COLOUR, ago, dayClock, deviceBars, holdable, makeModel, weakUpstream, hopOf, HOP_WORDS} from "./util.js";
   import Icon from "./Icon.svelte";
   import Pic from "./Pic.svelte";
   import MapView from "./MapView.svelte";
@@ -17,6 +17,7 @@
     const scan = snap.scan, rows = [{ieee: snap.stickIeee, name: "Adapter"}].concat(devices.filter(device => device.kind === "router" && device.status === "accepted").map(device => ({ieee: device.ieee, name: device.name})));
     return rows.map(row => {const answered = scan.answered.find(entry => entry.ieee === row.ieee); return Object.assign({}, row, {state: answered ? "ok" : scan.silent.includes(row.ieee) ? "silent" : scan.running && scan.asking === row.ieee ? "asking" : "waiting", hears: answered?.hears})});
   });
+  const upstreamText = device => {const weak = deviceBars(device, snap.stickIeee) >= 3 ? weakUpstream(device, devices, snap.stickIeee) : null; return weak ? `Strong to ${devices.find(other => other.ieee === device.parent)?.name}, ${HOP_WORDS[weak.hop.bars].toLowerCase()} from ${weak.device.name} on` : ""};
   let order = {bad: 0, warn: 1, waiting: 2, new: 3, ok: 4};
   let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.note ?? "") + " " + (device.vendor ?? "") + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => order[first.health.status] - order[second.health.status] || first.name.localeCompare(second.name)));
   let waiting = $derived(devices.filter(device => device.status === "waiting"));
@@ -60,7 +61,7 @@
         <button class="iconbtn small" title="Next change" disabled={!view.at} onclick={() => hop(1)}><Icon name="next" small/></button>
       </span>{/if}
       {#if view.at}<button class="chip" class:on={view.compare} onclick={() => view.compare = !view.compare}>{view.compare ? "Comparing with now" : "Compare with now"}</button><button class="chip" onclick={() => {view.at = null; view.compare = false}}>Back to now<kbd>Esc</kbd></button>{/if}
-      <span class="faint checked">{snap.scan.running ? `Checking… ${snap.scan.done} of ${snap.scan.total}` : checkedAt ? `Checked ${ago(checkedAt, view.now)}` : "Not checked yet"}</span>
+      <span class="faint checked">{snap.scan.running ? (snap.scan.retrying ? "Asking again the ones that didn't answer…" : `Checking… ${snap.scan.done} of ${snap.scan.total}`) : checkedAt ? `Checked ${ago(checkedAt, view.now)}` : "Not checked yet"}</span>
       <button class="chip" disabled={!snap.radio.up || snap.scan.running} onclick={() => act("rescan").then(() => toast("Map checked", null))}>Check now</button>
     </div>
     <div class="mapwrap">
@@ -78,7 +79,7 @@
       <MapView devices={devices} links={mapLinks} stickIeee={snap.stickIeee} then={thenLinks} ghosts={view.at ? [] : ghosts} {joining} chosen={view.chosen} open={view.open} onpick={pick} onhold={hold}/>{/if}
     </div>
     {#if view.compare}<div class="legend"><span><i class="l solid"></i>New route</span><span><i class="l dashed"></i>Route that went</span></div>
-    {:else}<div class="legend"><span><i style="width:13px;height:13px;border-radius:3px"></i>Plugged in, passes messages on</span><span><i style="width:13px;height:13px;border-radius:50%"></i>Battery, sleeps</span><span><i style="width:22px;height:0;border-width:2px 0 0"></i>Thicker = stronger signal</span>{#if ghosts.length && !view.at}<span><i class="l ghost"></i>Old route (last day)</span>{/if}</div>{/if}
+    {:else}<div class="legend"><span><i style="width:13px;height:13px;border-radius:3px"></i>Plugged in, passes messages on</span><span><i style="width:13px;height:13px;border-radius:50%"></i>Battery, sleeps</span><span><i style="width:22px;height:0;border-width:2px 0 0"></i>Thicker = stronger signal</span>{#if mapLinks.some(link => link.seen && link.seen < mapLinks.reduce((latest, other) => Math.max(latest, other.seen ?? 0), 0))}<span><i class="l dashed"></i>Last known: its plug missed the check</span>{/if}{#if ghosts.length && !view.at}<span><i class="l ghost"></i>Old route (last day)</span>{/if}</div>{/if}
     {#if view.at && nearEvents.length}<div class="near">{#each nearEvents as event}<div><span class="faint">{dayClock(event.ts)}</span> {event.text}</div>{/each}</div>{/if}
   </section>{/if}
 
@@ -108,11 +109,11 @@
             <Pic {device}/>
             <span class="main">
               <span class="name">{device.name}{#if device.health.status !== "ok"}<span class="dot" style="background:{STATUS_COLOUR[device.health.status]}"></span>{/if}</span>
-              <span class="sub">{device.health.reason ?? (device.note || makeModel(device))}</span>
+              <span class="sub">{device.health.reason ?? (upstreamText(device) || device.note || makeModel(device))}</span>
             </span>
             <span class="meta">
               {#if device.health.battery}<span title="Battery">{device.health.battery.percent}%</span>{/if}
-              <span class="bars" title={device.rssi != null ? `Signal ${device.rssi} dBm` : "Signal"}>{#each [1, 2, 3, 4] as bar}<b class:on={bar <= deviceBars(device)} style="height:{bar * 3 + 1}px"></b>{/each}</span>
+              <span class="bars" title={device.rssi != null ? `Signal ${device.rssi} dBm` : "Signal"}>{#each [1, 2, 3, 4] as bar}<b class:on={bar <= deviceBars(device, snap.stickIeee)} style="height:{bar * 3 + 1}px"></b>{/each}</span>
               <span class="seen">{ago(device.last_seen, view.now)}</span>
             </span>
           </button>

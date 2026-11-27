@@ -1,7 +1,7 @@
 <script>
   import {live, act, call, toast} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
-  import {STATUS_COLOUR, STATUS_WORD, ago, duration, dayClock, valueText, rssiWord, makeModel} from "./util.js";
+  import {STATUS_COLOUR, STATUS_WORD, ago, duration, dayClock, valueText, rssiWord, makeModel, hopOf, HOP_WORDS, weakUpstream} from "./util.js";
   import {weeksText} from "./weeks.js";
   import Icon from "./Icon.svelte";
   import Pic from "./Pic.svelte";
@@ -36,6 +36,7 @@
   // battery devices choose their own plug; Move it to… steers that choice
   let plugs = $derived(snap.devices.filter(other => other.kind === "router" && other.status === "accepted" && other.health.online && other.ieee !== device.parent));
   let nameOfIeee = ieee => !ieee || ieee === snap.stickIeee ? "the adapter" : snap.devices.find(other => other.ieee === ieee)?.name ?? ieee;
+  let ownHop = $derived(hopOf(device, snap.stickIeee)), weak = $derived(ownHop.bars >= 3 ? weakUpstream(device, snap.devices, snap.stickIeee) : null);
   let editingNote = $state(false), noteDraft = $state("");
   async function saveNote() {if (!editingNote) return; editingNote = false; if (noteDraft.trim() !== (device.note ?? "")) await act("note", {ieee: device.ieee, note: noteDraft}).catch(() => {})}
   async function saveTopic() {if (!editingTopic) return; editingTopic = false; if (topicDraft.trim() && topicDraft !== device.topic) await act("topic", {ieee: device.ieee, topic: topicDraft}).catch(() => {})}
@@ -126,7 +127,7 @@
 
   <div class="box">
     <h3>How it connects</h3>
-    <div class="chain">{#each chain as ieee, index}{#if index}<span class="arrow">→</span>{/if}<button class="hop" onclick={() => ieee !== snap.stickIeee && (view.open = ieee)}>{nameOf(ieee)}</button>{/each}{#if chain.length === 1}<span class="faint">Not seen in a map check yet</span>{/if}</div>
+    <div class="chain">{#each chain as ieee, index}{#if index}{@const hop = hopOf(snap.devices.find(other => other.ieee === chain[index - 1]) ?? device, snap.stickIeee)}<span class="arrow bars{hop.bars}" title={hop.text}>{HOP_WORDS[hop.bars] ?? ""} →</span>{/if}<button class="hop" onclick={() => ieee !== snap.stickIeee && (view.open = ieee)}>{nameOf(ieee)}</button>{/each}{#if chain.length === 1}<span class="faint">Not seen in a map check yet</span>{/if}</div>
     <div class="striphead"><span class="faint">Last {DAYS} days</span>{#if stripTip}<span>{stripTip}</span>{/if}</div>
     <div class="strip" role="img" aria-label="Which device it talked through, over the last 30 days">
       {#each strip.segments as segment}
@@ -134,7 +135,8 @@
       {/each}
     </div>
     {#if strip.tints.size}<div class="keys">{#each Array.from(strip.tints) as [parent, tint]}<span><i style="background:{tint}"></i>{nameOf(parent)}</span>{/each}<span><i class="gap"></i>Not seen</span></div>{/if}
-    <h3 style="margin-top:10px">Signal {#if device.rssi != null}<span class="faint">{rssiWord(device.rssi)}, {device.rssi} dBm{device.state.linkquality != null ? ` · link quality ${device.state.linkquality} of 255` : ""}</span>{:else}<span class="faint">link quality {device.state.linkquality ?? device.lqi ?? "–"} of 255</span>{/if}</h3>
+    {#if weak}<p class="note small">Its own link to {nameOf(device.parent)} is {HOP_WORDS[ownHop.bars].toLowerCase()}. What holds it back is {weak.device.name} to {nameOf(weak.device.parent ?? snap.stickIeee)} ({HOP_WORDS[weak.hop.bars].toLowerCase()}): a plug between them, or moving {weak.device.name}, would help everything that talks through it.</p>{/if}
+    <h3 style="margin-top:10px">Signal {#if device.parent && device.parent !== snap.stickIeee}<span class="faint">{HOP_WORDS[ownHop.bars]} to {nameOf(device.parent)}{ownHop.text ? ` · ${ownHop.text}` : ""}</span>{:else if device.rssi != null}<span class="faint">{rssiWord(device.rssi)}, {device.rssi} dBm{device.state.linkquality != null ? ` · link quality ${device.state.linkquality} of 255` : ""}</span>{:else}<span class="faint">link quality {device.state.linkquality ?? device.lqi ?? "–"} of 255</span>{/if}</h3>
     <Spark points={signal} min={0} max={255} height={36} label="Signal over 30 days"/>
   </div>
 
@@ -221,6 +223,8 @@
   .link{color:var(--accent);font-size:14px;text-align:left;padding:4px 0;align-self:flex-start}
   .link:disabled{opacity:.4}
   .addlist{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .arrow{font-size:12.5px;color:var(--muted)}.arrow.bars1{color:var(--red)}.arrow.bars2{color:var(--amber)}.arrow.bars3,.arrow.bars4{color:var(--green)}
+  .note{color:var(--muted);font-size:13.5px;margin:6px 0 0}
   .chain{display:flex;align-items:center;gap:7px;font-size:14px;flex-wrap:wrap}
   .hop{padding:3px 10px;border-radius:12px;background:var(--glass)}
   .arrow{color:var(--muted)}

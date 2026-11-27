@@ -89,6 +89,15 @@ test("end to end with the simulator: MQTT out and in, holding area, undo, heartb
     await until(() => seen.has("s2m/bridge/tele"));
     assert.equal(JSON.parse(seen.get("s2m/bridge/tele")!).adapter, "up");
     await until(() => app.store.devices().length === 9);
+    // map: a route note from normal traffic moves a device at once; a plug that misses a check keeps the routes through it, marked as seen earlier
+    const stick = (app.radio as any).stick, door = "0x00158d0000000107", climate = "0x00158d0000000108";
+    await app.scanNow();
+    app.routeSeen([climate, "0xa4c1380000000102", stick], 150);
+    assert.equal(app.parents().get(climate), "0xa4c1380000000102");
+    await (app.radio as any).set("0xa4c1380000000101", {_power: false}); await app.scanNow();
+    const latest = app.store.linksAt(), carried = latest.links.find(link => link.child === door)!;
+    assert.equal(carried.parent, "0xa4c1380000000101"); assert.ok(carried.seen < latest.ts);
+    (app.radio as any).devices.find((device: any) => device.ieee === "0xa4c1380000000101").off = false;
     const plug = app.store.device("0xa4c1380000000101")!;
     await until(() => seen.has(`s2m/${plug.topic}`));
     // rename moves the topic; undo puts it back

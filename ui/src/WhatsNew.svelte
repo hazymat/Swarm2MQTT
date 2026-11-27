@@ -16,25 +16,27 @@
 <svelte:window onkeydown={event => {if (event.key === "Escape") close()}}/>
 <div class="scrim" onclick={close} role="presentation">
   <div class="sheet card" onclick={event => event.stopPropagation()} role="dialog" aria-label="What's new">
-    <div class="head"><h2>What's new</h2><span class="muted">{view.whatsNewAll ? `You have ${snap.version}` : `Updated to ${snap.version}`}</span><button class="x" onclick={close} aria-label="Close">✕<kbd>Esc</kbd></button></div>
+    <div class="handle"></div>
+    <div class="head"><h2>What's new</h2><span class="muted">{view.whatsNewAll ? snap.version : `Updated to ${snap.version}`}</span><button class="chip close" onclick={close}>✓ Close<kbd>Esc</kbd></button></div>
     <ul>
       {#each entries as entry (entry.id)}
-        <li class:new={entry.id > seen}><span>{entry.text}</span>{#if entry.at && canShow}<button class="link" onclick={() => showMe(entry)}>Show me ›</button>{/if}</li>
+        <li class:new={entry.id > seen}><span class="words">{entry.text}</span>{#if entry.at && canShow}<button class="pill ghost small" onclick={() => showMe(entry)}>Show me</button>{/if}</li>
       {/each}
     </ul>
-    <button class="pill primary" onclick={close}>Got it</button>
   </div>
 </div>
 <style>
   .scrim{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px}
-  .sheet{width:min(560px,100%);max-height:calc(100vh - 32px);overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;background:var(--sheet);box-shadow:var(--shadow)}
-  .head{display:flex;align-items:baseline;gap:10px}
-  h2{font-size:1.5rem;font-weight:300}
-  .x{margin-left:auto;color:var(--muted)}
-  ul{list-style:none;display:flex;flex-direction:column;gap:10px}
-  li{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:14px;border:1px solid var(--glass-border)}
-  li.new{border-color:var(--active-border);background:color-mix(in srgb,var(--accent) 10%,transparent)}
-  .link{color:var(--accent);align-self:flex-start;font-size:14px}
-  .pill{align-self:flex-end}
-  @media (max-width:700px){.scrim{padding:0;align-items:stretch}.sheet{max-height:none;border-radius:0}}
+  .sheet{width:min(620px,100%);max-height:80vh;padding:8px 16px 16px;display:flex;flex-direction:column;gap:6px;background:var(--sheet);box-shadow:var(--shadow)}
+  .handle{display:none;width:44px;height:5px;border-radius:3px;background:var(--glass-border);margin:2px auto 6px}
+  .head{display:flex;align-items:center;gap:10px;padding-top:8px}
+  h2{font-size:1.35rem;font-weight:300}
+  .close{margin-left:auto}
+  ul{list-style:none;margin:0;padding:0;max-height:58vh;overflow-y:auto}
+  li{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--glass-border);font-size:14.5px;line-height:1.35}
+  li.new .words::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin:0 8px 1px 0}
+  .words{flex:1}
+  li .pill{flex:none}
+  /* phones: a sheet from the bottom, the page still showing above it */
+  @media (max-width:700px){.scrim{padding:0;align-items:flex-end}.sheet{border-radius:18px 18px 0 0;max-height:75dvh;padding-bottom:calc(16px + env(safe-area-inset-bottom))}.handle{display:block}.head{padding-top:0}}
 </style>

@@ -10,6 +10,8 @@ Every Zigbee device Zigbee2MQTT supports, with a live map that shows what's wron
 - Each device gets its own MQTT topic and message format
 - Switch from Zigbee2MQTT without re-pairing anything
 
+[Everything it does that Zigbee2MQTT doesn't](docs/why-swarm2mqtt.md)
+
 ## Setup
 
 Any Debian or Ubuntu machine will do: a small virtual machine, or a container (CT) on Proxmox. A container is fine unless your Zigbee adapter has to be plugged into the machine itself; a network adapter (like an SMLIGHT SLZB) just needs an address.

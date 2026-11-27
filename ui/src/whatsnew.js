@@ -2,6 +2,8 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 29, text: "With an Ember adapter, the map keeps itself up to date from normal traffic: when a device starts talking through a different plug, the map changes straight away, without a check. A plug that misses a check is asked again 30 seconds later, and if it still doesn't answer, its routes stay on the map, dashed, as last known.", go: "home"},
+  {id: 28, text: "A device's page shows the signal of each hop on its route. If a device talks through a plug, its own signal is its link to that plug, and the page says when the weak link is the plug's own.", go: "home"},
   {id: 27, text: "The network map starts fitted to your devices. Zoom with the mouse wheel or by pinching, drag empty space to move around, and press Fit to go back.", go: "home"},
   {id: 26, text: "Move a battery device to another plug: on its page, Talks through > Move it to… opens joining on that plug only and asks the device to come back through it. Wake it with its button and Activity says when it has moved.", go: "home"},
   {id: 25, text: "Each device has a description you can write, under its name: tap it to edit. Until you do, it shows the make and model. Search finds it, and descriptions come over from Zigbee2MQTT.", go: "home"},

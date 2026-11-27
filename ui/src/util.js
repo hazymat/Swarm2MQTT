@@ -51,7 +51,21 @@ export const signalBars = lqi => lqi == null ? 0 : lqi > 180 ? 4 : lqi > 120 ? 3
 export const makeModel = device => [device.vendor, device.model].filter(Boolean).join(" ");
 export const rssiBars = rssi => rssi > -65 ? 4 : rssi > -75 ? 3 : rssi > -82 ? 2 : 1;
 export const rssiWord = rssi => rssi > -70 ? "Strong" : rssi > -82 ? "Fair" : "Weak";
-export const deviceBars = device => device.rssi != null ? rssiBars(device.rssi) : signalBars(device.state.linkquality ?? device.lqi);
+// The adapter measures only the last hop of what it receives. So a device straight to the adapter: measured on its messages. Through a plug: how well that plug hears it (map check).
+export const HOP_WORDS = ["", "Weak", "Fair", "Good", "Strong"];
+export function hopOf(device, stickIeee) {
+  const direct = !device.parent || device.parent === stickIeee;
+  if (direct && device.rssi != null) return {bars: rssiBars(device.rssi), text: `${device.rssi} dBm`};
+  const lqi = direct ? device.state.linkquality ?? device.lqi : device.lqi ?? device.state.linkquality;
+  return {bars: signalBars(lqi), text: lqi == null ? "" : `link quality ${lqi}`};
+}
+export const deviceBars = (device, stickIeee) => hopOf(device, stickIeee).bars;
+// the weakest hop further along the route, when that's what holds it back
+export function weakUpstream(device, devices, stickIeee) {
+  let at = devices.find(other => other.ieee === device.parent), weakest = null;
+  for (let step = 0; at && step < 8; step++) {const hop = hopOf(at, stickIeee); if (hop.bars && hop.bars <= 2 && (!weakest || hop.bars < weakest.hop.bars)) weakest = {device: at, hop}; at = devices.find(other => other.ieee === at.parent)}
+  return weakest;
+}
 export function valueText(control, value) {
   if (value === undefined || value === null) return "–";
   if (control?.type === "binary") {if (control.property === "occupancy") return value === control.on ? "Motion" : "Clear"; if (control.property === "contact") return value === control.on ? "Closed" : "Open"; return value === control.on ? "On" : "Off"}

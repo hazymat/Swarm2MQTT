@@ -49,6 +49,16 @@ Ezsp.prototype.ezspIncomingMessageHandler = function (type: unknown, apsFrame: u
   try {const ieee = ieeeOf(packetInfo?.senderShortId); if (ieee) current?.emit("signal", ieee, packetInfo.lastHopRssi, packetInfo.lastHopLqi)} catch {}
   return incoming.call(this, type, apsFrame, packetInfo, contents);
 };
+// Ember adapters run as the network's collection point, so a message that came through plugs is preceded by a note of the path it took ("route record").
+// Listening to these keeps the map current with no asking: path = the device, each plug it went through (nearest the device first), then the adapter.
+const routeRecord = Ezsp.prototype.ezspIncomingRouteRecordHandler;
+Ezsp.prototype.ezspIncomingRouteRecordHandler = function (source: number, sourceEui: string, lastHopLqi: number, lastHopRssi: number, relayCount: number, relayList: number[]) {
+  try {
+    const coordinator = current?.controller?.getDevicesByType("Coordinator")[0]?.ieeeAddr, relays = (relayList ?? []).map(nwk => ieeeOf(nwk));
+    if (coordinator && sourceEui && relays.every(Boolean)) current?.emit("route", [String(sourceEui)].concat(relays as string[], [coordinator]), lastHopLqi);
+  } catch {}
+  return routeRecord.call(this, source, sourceEui, lastHopLqi, lastHopRssi, relayCount, relayList);
+};
 const emitEzsp = Ezsp.prototype.emit;
 Ezsp.prototype.emit = function (name: string, ...args: any[]) {
   try {
@@ -182,26 +192,26 @@ export class HerdsmanRadio extends Radio {
     const coordinator = controller.getDevicesByType("Coordinator")[0], askList = [coordinator].concat(controller.getDevicesByType("Router"));
     const state: ScanProgress = {done: 0, total: askList.length, answered: [], silent: []};
     depth.set(coordinator.ieeeAddr, 0);
-    for (const router of askList) {
-      let table: any[] = [];
-      progress(Object.assign(state, {asking: router.ieeeAddr}));
-      // one that doesn't answer within 20 s is noted and skipped, so the check always finishes
-      try {table = await Promise.race([router.lqi(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer")), 20000))]); state.answered.push({ieee: router.ieeeAddr, hears: table.length})}
-      catch {state.silent.push(router.ieeeAddr); state.done++; continue}
-      state.done++;
+    // one that doesn't answer within 20 s is asked once more 30 s later (just after a restart the network is still settling), so the check always finishes
+    const ask = (router: any): Promise<any[]> => Promise.race([router.lqi(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer")), 20000))]);
+    const read = (router: any, table: any[]) => {
+      state.answered.push({ieee: router.ieeeAddr, hears: table.length});
       for (const entry of table) {
         if (!controller.getDeviceByIeeeAddr(entry.eui64)) this.adopt(entry.eui64, entry.nwkAddress);
         if (entry.relationship === 1 && entry.deviceType === 2) links.push({child: entry.eui64, parent: router.ieeeAddr, lqi: entry.lqi});
         if (entry.deviceType === 1 || entry.deviceType === 0) {const list = routerNeighbours.get(entry.eui64) ?? []; list.push({ieee: router.ieeeAddr, lqi: entry.lqi}); routerNeighbours.set(entry.eui64, list); if (entry.depth !== undefined) depth.set(entry.eui64, entry.depth)}
       }
-    }
+    };
+    const retry: any[] = [];
+    for (const router of askList) {progress(Object.assign(state, {asking: router.ieeeAddr})); try {read(router, await ask(router))} catch {retry.push(router)} state.done++; progress(state)}
+    if (retry.length) {progress(Object.assign(state, {asking: undefined, retrying: true})); await new Promise(resolve => setTimeout(resolve, 30000)); for (const router of retry) {progress(Object.assign(state, {asking: router.ieeeAddr})); try {read(router, await ask(router))} catch {state.silent.push(router.ieeeAddr)}}}
     for (const [routerIeee, neighbours] of routerNeighbours) {
       if (routerIeee === coordinator.ieeeAddr) continue;
       const own = depth.get(routerIeee) ?? 99, nearer = neighbours.filter(neighbour => (depth.get(neighbour.ieee) ?? 99) < own).sort((first, second) => second.lqi - first.lqi);
       const best = nearer[0] ?? neighbours.sort((first, second) => second.lqi - first.lqi)[0];
       if (best) links.push({child: routerIeee, parent: best.ieee, lqi: best.lqi});
     }
-    progress(Object.assign(state, {asking: undefined}));
+    progress(Object.assign(state, {asking: undefined, retrying: undefined}));
     return links;
   }
   async ping(ieee: string) {await this.device(ieee).ping()}

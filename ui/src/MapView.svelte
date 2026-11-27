@@ -1,6 +1,6 @@
 <script>
   // The radio map: adapter in the middle, plugged-in devices as squares, battery devices as circles, lines for "talks through"
-  import {KIND_SHAPES, shapeOf, STATUS_COLOUR} from "./util.js";
+  import {KIND_SHAPES, shapeOf, STATUS_COLOUR, dayClock} from "./util.js";
   import {save} from "./ui.svelte.js";
   let {devices, links, stickIeee, then = null, ghosts = [], joining = false, chosen = [], open = null, onpick, onhold} = $props();
   const WIDTH = 900, HEIGHT = 1000, CX = 450, CY = 480;
@@ -29,6 +29,7 @@
   const at = ieee => layout.spot.get(ieee);
   const key = link => `${link.child}>${link.parent}`;
   let nowKeys = $derived(new Set(links.map(key)));
+  let newest = $derived(links.reduce((latest, link) => Math.max(latest, link.seen ?? 0), 0)); // the check's own time: older links were carried over from a router that didn't answer
   let thenOnly = $derived(then ? then.filter(link => !nowKeys.has(key(link))) : []);
   let thenKeys = $derived(new Set((then ?? []).map(key)));
   let colourOf = device => device.health.status === "ok" ? "var(--green)" : STATUS_COLOUR[device.health.status];
@@ -64,12 +65,13 @@
     {@const child = devices.find(device => device.ieee === link.child)}
     {#if child && at(link.child) && at(link.parent)}
       {#if then && !thenKeys.has(key(link))}<line class="halo" x1={at(link.parent).x} y1={at(link.parent).y} x2={at(link.child).x} y2={at(link.child).y}/>{/if}
-      <line class="link" class:broken={broken(child)} x1={at(link.parent).x} y1={at(link.parent).y} x2={at(link.child).x} y2={at(link.child).y} stroke-width={broken(child) ? 2 : Math.max(1.5, link.lqi / 40)}/>
+      {@const stale = link.seen && link.seen < newest}
+      <line class="link" class:broken={broken(child)} class:stale x1={at(link.parent).x} y1={at(link.parent).y} x2={at(link.child).x} y2={at(link.child).y} stroke-width={broken(child) ? 2 : Math.max(1.5, link.lqi / 40)}>{#if stale}<title>As of {dayClock(link.seen)}: the device it talks through didn't answer the last check</title>{/if}</line>
     {/if}
   {/each}
   {#if joining}{#each devices.filter(device => device.kind === "router" && device.health.online) as device}{#if at(device.ieee)}{#each [34, 54, 76] as radius, index}<circle class="beacon" cx={at(device.ieee).x} cy={at(device.ieee).y} r={radius} style="animation-delay:{index * .35}s"/>{/each}{/if}{/each}
     {#each [48, 70, 94] as radius, index}<circle class="beacon" cx={CX} cy={CY} r={radius} style="animation-delay:{index * .35}s"/>{/each}{/if}
-  {#if layout.strip}<line class="strip" x1="30" x2={WIDTH - 30} y1={layout.strip} y2={layout.strip}/><text class="striplabel" x="30" y={layout.strip - 10}>Not in the last check</text>{/if}
+  {#if layout.strip}<line class="strip" x1="30" x2={WIDTH - 30} y1={layout.strip} y2={layout.strip}/><text class="striplabel" x="30" y={layout.strip - 10}>Route not known yet</text>{/if}
   <g class="node" onpointerdown={event => event.stopPropagation()}>
     <path d="M{CX} {CY - 34}l29.5 17v34L{CX} {CY + 34}l-29.5-17v-34z" fill="#2a2a33" stroke="#f2c14e" stroke-width="3"/><circle cx={CX} cy={CY} r="8" fill="#f2c14e"/>
     <text x={CX} y={CY + 58}>Adapter</text>
@@ -97,6 +99,7 @@
   svg{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
   .fit{position:absolute;right:12px;bottom:12px;z-index:1}
   .link{stroke:var(--line);stroke-linecap:round}
+  .link.stale{stroke-dasharray:7 6;opacity:.7}
   .link.broken{stroke:color-mix(in srgb,var(--red) 45%,transparent);stroke-dasharray:6 6}
   .ghost{stroke:var(--faint);stroke-width:2;stroke-dasharray:3 7;opacity:.6}
   .gone{stroke:var(--muted);stroke-width:2.5;stroke-dasharray:8 8}

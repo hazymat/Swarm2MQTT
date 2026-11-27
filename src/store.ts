@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS scenes(id INTEGER PRIMARY KEY, group_id INT, name TEX
 CREATE TABLE IF NOT EXISTS bindings(from_ieee TEXT, "to" TEXT, PRIMARY KEY(from_ieee, "to"));
 CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forward TEXT, backward TEXT, undone INT DEFAULT 0);`);
     // columns added after the first release
-    for (const [table, column] of [["devices", "note TEXT"]]) try {this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)} catch {}
+    for (const [table, column] of [["devices", "note TEXT"], ["links", "seen INT"]]) try {this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)} catch {}
   }
   // settings
   get<T>(key: string, fallback: T): T {const row: any = this.db.prepare("SELECT value FROM settings WHERE key=?").get(key); return row ? JSON.parse(row.value) : fallback}
@@ -52,11 +52,11 @@ CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forw
   }
   history(ieee: string, key: string, since = Date.now() - HISTORY_DAYS * 864e5): {ts: number; value: number}[] {return this.db.prepare("SELECT ts,value FROM history WHERE ieee=? AND key=? AND ts>=? ORDER BY ts").all(ieee, key, since) as any}
   // mesh links: a snapshot is all rows sharing one ts
-  saveLinks(links: {child: string; parent: string; lqi: number}[], ts = Date.now()) {const insert = this.db.prepare("INSERT INTO links VALUES(?,?,?,?)"); for (const link of links) insert.run(ts, link.child, link.parent, link.lqi); return ts}
-  linksAt(ts = Date.now()): {ts: number; links: {child: string; parent: string; lqi: number}[]} {
+  saveLinks(links: {child: string; parent: string; lqi?: number; seen?: number}[], ts = Date.now()) {const insert = this.db.prepare("INSERT INTO links(ts,child,parent,lqi,seen) VALUES(?,?,?,?,?)"); for (const link of links) insert.run(ts, link.child, link.parent, link.lqi ?? null, link.seen ?? ts); return ts}
+  linksAt(ts = Date.now()): {ts: number; links: {child: string; parent: string; lqi?: number; seen: number}[]} {
     const row: any = this.db.prepare("SELECT MAX(ts) ts FROM links WHERE ts<=?").get(ts);
     if (!row?.ts) return {ts: 0, links: []};
-    return {ts: row.ts, links: this.db.prepare("SELECT child,parent,lqi FROM links WHERE ts=?").all(row.ts) as any};
+    return {ts: row.ts, links: this.db.prepare("SELECT child,parent,lqi,COALESCE(seen,ts) seen FROM links WHERE ts=?").all(row.ts) as any};
   }
   snapshotTimes(): number[] {return (this.db.prepare("SELECT DISTINCT ts FROM links ORDER BY ts").all() as any[]).map(row => row.ts)}
   linkHistory(child: string): {ts: number; parent: string; lqi: number}[] {return this.db.prepare("SELECT ts,parent,lqi FROM links WHERE child=? ORDER BY ts").all(child) as any}
