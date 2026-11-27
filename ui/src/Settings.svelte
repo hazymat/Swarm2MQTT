@@ -44,7 +44,7 @@
     <h2>Updates</h2>
     <div class="kv"><span class="k">Swarm2MQTT</span><span>{snap.version}</span></div>
     <div class="kv"><span class="k">Channel</span><span class="seg"><button class:on={prefs.updateChannel !== "dev"} onclick={() => {prefs.updateChannel = "stable"; act("prefs", {updateChannel: "stable"})}}>Stable</button><button class:on={prefs.updateChannel === "dev"} onclick={() => {prefs.updateChannel = "dev"; act("prefs", {updateChannel: "dev"})}}>Dev</button></span></div>
-    {#if snap.update?.latest && snap.update.latest !== snap.version}
+    {#if snap.update?.available}
       <div class="kv"><span><span class="dot" style="background:var(--blue)"></span> {snap.update.latest} is out</span><button class="pill primary" disabled={snap.update.running} onclick={() => act("updateNow").catch(() => {})}>{snap.update.running ? "Updating…" : `Update to ${snap.update.latest}`}</button></div>
     {:else}<div class="kv"><span class="muted">{snap.update?.checkedAt ? "Up to date" : ""}</span><button class="pill ghost" onclick={() => act("updateCheck").catch(() => {})}>Check for updates</button></div>{/if}
   </section>

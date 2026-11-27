@@ -8,7 +8,8 @@ export function connect() {
   socket.onclose = () => {live.connected = false; setTimeout(connect, 2000)};
   socket.onmessage = message => {
     const data = JSON.parse(message.data);
-    if (data.t === "snapshot") live.snap = data.data;
+    // after an app update the service restarts with a new version: load the new page too
+    if (data.t === "snapshot") {if (live.snap && live.snap.version !== data.data.version) location.reload(); live.snap = data.data}
     if (data.t === "event") live.events = [data.event].concat(live.events).slice(0, 500);
     if (data.t === "toast") toast(data.toast.label, data.toast.id ? undo : null);
     if (data.t === "rejoin") live.rejoin = data.data;

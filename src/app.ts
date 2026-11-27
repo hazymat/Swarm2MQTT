@@ -10,6 +10,7 @@ import {MqttBridge, DEFAULT_MQTT, type MqttSettings} from "./mqtt.js";
 import {addGap, health, type Health} from "./health.js";
 import {translate} from "./errors.js";
 
+const newerThan = (candidate: string, current: string) => {const left = candidate.split(".").map(Number), right = current.split(".").map(Number); for (let index = 0; index < 3; index++) if ((left[index] ?? 0) !== (right[index] ?? 0)) return (left[index] ?? 0) > (right[index] ?? 0); return false};
 export const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const LINK_SCAN_MS = 6 * 3600e3, BACKUPS_KEPT = 14, REJOIN_SECONDS = 180;
 export interface Prefs {batteryLeadDays: number; batteryPercent: number; stats: boolean; updateChannel: "stable" | "dev"}
@@ -40,7 +41,8 @@ export class App extends EventEmitter {
     this.mqtt = new MqttBridge(() => this.mqttSettings, (topic, payload) => this.onMqttSet(topic, payload), () => this.tele(), () => this.changed());
   }
   get mqttSettings(): MqttSettings {return Object.assign({}, DEFAULT_MQTT, this.store.get("mqtt", {}))}
-  get prefs(): Prefs {return Object.assign({}, DEFAULT_PREFS, this.store.get("prefs", {}))}
+  // the update channel follows the running build (dev build → dev channel) until the user picks one
+  get prefs(): Prefs {return Object.assign({}, DEFAULT_PREFS, {updateChannel: this.update.channel ?? "stable"}, this.store.get("prefs", {}))}
   get stick(): StickConfig | undefined {return this.store.get<StickConfig | undefined>("stick", undefined)}
 
   async start() {
@@ -49,6 +51,8 @@ export class App extends EventEmitter {
     setInterval(() => {this.store.prune(); this.dailyBackup(); this.checkAvailability()}, 60e3).unref();
     setInterval(() => this.checkAvailability(), 5e3).unref();
     this.dailyBackup();
+    // look for app updates soon after starting, then every 6 hours; the page shows a bar when one is out
+    if (!this.sim) {setTimeout(() => this.checkUpdate().catch(() => {}), 5e3).unref(); setInterval(() => this.checkUpdate().catch(() => {}), 6 * 3600e3).unref()}
   }
   // Radio supervisor: start, and on any failure mark it down and try again with backoff. Everything else keeps running.
   startRadio() {
@@ -348,20 +352,21 @@ export class App extends EventEmitter {
   }
 
   // app updates: GitHub releases, stable or dev channel; the install script swaps versions and systemd restarts us
-  update: {latest?: string; checkedAt?: number; running?: boolean} = {};
+  update: {latest?: string; available?: boolean; channel?: "stable" | "dev"; checkedAt?: number; running?: boolean} = {};
   async checkUpdate() {
-    const response = await fetch("https://api.github.com/repos/hazymat/swarm2mqtt/releases?per_page=30", {headers: {accept: "application/vnd.github+json"}});
+    const response = await fetch("https://api.github.com/repos/hazymat/swarm2mqtt/releases?per_page=30", {headers: {accept: "application/vnd.github+json", "user-agent": "Swarm2MQTT"}});
     if (!response.ok) throw new Error("Couldn't reach GitHub to check for updates.");
-    const releases: any[] = await response.json(), dev = this.prefs.updateChannel === "dev";
-    const newest = releases.filter(release => !release.draft && (dev || !release.prerelease))[0];
-    this.update = {latest: newest?.tag_name?.replace(/^v/, ""), checkedAt: Date.now()};
+    const releases: any[] = await response.json(), chosen = this.store.get<Partial<Prefs>>("prefs", {}).updateChannel;
+    const channel = chosen ?? (releases.find(release => release.tag_name === "v" + VERSION)?.prerelease ? "dev" : "stable");
+    const newest = releases.filter(release => !release.draft && (channel === "dev" || !release.prerelease))[0], latest = newest?.tag_name?.replace(/^v/, "");
+    this.update = {latest, available: !!latest && newerThan(latest, VERSION), channel, checkedAt: Date.now()};
     this.changed();
-    return this.update.latest && this.update.latest !== VERSION ? this.update.latest : null;
+    return this.update.available ? latest : null;
   }
   async updateNow() {
     const dir = process.env.SWARM2MQTT_INSTALL_DIR, tag = this.update.latest;
     if (!dir || !existsSync(`${dir}/install.sh`)) throw new Error("Update now works when Swarm2MQTT was installed with the install script.");
-    if (!tag) throw new Error("Check for an update first.");
+    if (!tag || !this.update.available) throw new Error("Check for an update first.");
     this.update.running = true; this.changed();
     this.log("info", `Updating Swarm2MQTT to ${tag}…`);
     const code = await new Promise<number>(resolve => spawn("bash", [`${dir}/install.sh`, "--update", "v" + tag], {stdio: "ignore"}).on("exit", exitCode => resolve(exitCode ?? 1)).on("error", () => resolve(1)));

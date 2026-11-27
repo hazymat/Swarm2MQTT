@@ -10,6 +10,7 @@
   import Wizard from "./Wizard.svelte";
   import Toasts from "./Toasts.svelte";
   import JoinPill from "./JoinPill.svelte";
+  import UpdateBar from "./UpdateBar.svelte";
 
   const PAGES = {home: {label: "Home", icon: "home", tint: "var(--peach)"}, groups: {label: "Groups", icon: "groups", tint: "var(--mint)"}, activity: {label: "Activity", icon: "activity", tint: "var(--sky)"}, settings: {label: "Settings", icon: "settings", tint: "var(--lilac)"}};
   let snap = $derived(live.snap);
@@ -47,6 +48,7 @@
   <div class="empty" style="height:100vh"><img src="/icon.svg" width="48" alt=""><span>Connecting to Swarm2MQTT…</span></div>
 {:else if needsSetup || view.wizard}
   <Wizard/>
+  <UpdateBar/>
 {:else}
   <aside id="sidebar" onpointermove={navMove} class:dragging>
     <div id="wordmark"><img src="/icon.svg" width="30" alt="">Swarm2MQTT</div>
@@ -72,6 +74,7 @@
     </main>
   </div>
   <Toasts/>
+  <UpdateBar/>
 {/if}
 
 <style>
