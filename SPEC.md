@@ -1,4 +1,4 @@
-# Swarm2MQTT: spec (draft 3, 27 Nov 2026)
+# Swarm2MQTT: spec (draft 4, 27 Nov 2026)
 
 **Swarm2MQTT**. A replacement for Zigbee2MQTT that you never have to understand Zigbee to use.
 
@@ -51,7 +51,7 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 | P18 | **Each device gets its own MQTT topic** | Only possible by putting slashes in its name | Topic is its own field on the device, separate from the display name. |
 | P19 | **Choose the message format per device** | Can't shape the JSON or split it into paths | Per device: one JSON message, one topic per value, or both. Optional field renaming. |
 | P20 | **MQTT is the first thing in Settings** | MQTT is tab 8 of a sub-sub-menu | MQTT is the first card in Settings. |
-| P21 | **Home Assistant keeps working** *(added)* | — | Default topics and Home Assistant discovery match Zigbee2MQTT's, so existing automations don't notice the switch. |
+| P21 | **Switching is one find-and-replace** *(added)* | — | Topics and message shapes match Zigbee2MQTT's under a `swarm2mqtt/` prefix, so automations move over by changing the prefix. |
 
 ### No jargon
 
@@ -83,7 +83,7 @@ Browser UI (Svelte)
    │ websocket
 Swarm2MQTT service (Node + TypeScript, always running)
    ├─ State store (SQLite): devices, last states, topology history, settings, event log
-   ├─ MQTT bridge: per-device topics and formats, HA discovery
+   ├─ MQTT bridge: per-device topics and formats, bridge online/offline state
    ├─ Health engine: reasons, knock-on effects, automatic repairs
    └─ Radio supervisor ── zigbee-herdsman (talks to the stick)
                           zigbee-herdsman-converters (device library)
@@ -92,7 +92,8 @@ Swarm2MQTT service (Node + TypeScript, always running)
 - **The service never exits because of the stick.** The radio supervisor owns herdsman. If the stick is missing or crashes, the supervisor marks the radio down, retries with backoff, and everything else keeps running. This is the core change from Z2M, which stops when the adapter fails.
 - **The store is the source of truth for the UI**, not herdsman's live state. That's what makes P14 possible.
 - **Settings live in the store**, edited through the UI. Export/import as JSON (or YAML, same content).
-- Runs on Linux (a home server first), later a Docker image and a Home Assistant add-on.
+- Runs on Linux as a Node service under systemd, installed with one command, in its own VM or container (first install: beside Z2M on the Proxmox host). No Docker in v1.
+- Updates: an in-app **Update now** button pulls GitHub releases. Two channels like WinSqueeze: every merge to main is a dev build, a chosen dev build is promoted to stable.
 - Same front-end stack and DESIGN.md as WinSqueeze.
 
 **Challenge considered and rejected:** just writing a new front end for Zigbee2MQTT. Z2M does allow custom front ends, but the UI would still vanish when the stick goes (P14), YAML would still exist (P16), per-device formats (P19) need changes inside Z2M. Building on the two libraries Z2M itself uses gets all of that and keeps device support.
@@ -189,6 +190,7 @@ Rule: every message names the thing, says what happened in its terms, and offers
 | Device offline, parent router offline | "Cut off: it talks through Hall plug, which is off." → Show Hall plug | Device panel, map |
 | Interview failed | "Couldn't finish setting up. Press any button on it to wake it." | Device panel |
 | Adapter disconnected | "Zigbee stick not found. Check it's plugged in." | Banner |
+| Network stick answers but Zigbee port refuses (stick switched to USB mode) | "Your stick has switched to USB mode. Press its button once; the blue light should go off." Not switched back automatically. | Banner |
 | MQTT connect failed | "Can't reach your MQTT server at 10.x.x.x. Wrong password?" | Settings > MQTT, header pill |
 | Unsupported device | "We know this is a Tuya device but not which one, so it has no controls yet." → Copy details to request support | Device panel |
 
@@ -198,7 +200,8 @@ The translation table is a file in the repo. Any error without an entry shows "S
 
 ## 6. MQTT per device
 
-- **Topic:** defaults to `zigbee2mqtt/<name>` (P21). Editable per device; a global prefix lives in Settings > MQTT.
+- **Topic:** defaults to `swarm2mqtt/<name>` (P21). Editable per device; the global prefix lives in Settings > MQTT.
+- **Bridge state:** `swarm2mqtt/bridge/state` is retained `online`/`offline`, with `offline` set as the MQTT last will, the same signal Z2M gives. Existing "Z2M offline" alerts work by changing the topic.
 - **Format**, per device, three choices:
   - One message: `…/kitchen_sensor` → `{"occupancy":true,"battery":80}`
   - One topic per value: `…/kitchen_sensor/occupancy` → `true`
@@ -206,7 +209,6 @@ The translation table is a file in the repo. Any error without an entry shows "S
 - **Rename fields** (optional): table of library name → your name, e.g. `occupancy` → `motion`.
 - **Commands in:** same shape accepted on `…/set` (JSON) or `…/<field>/set` (single value).
 - Preview box shows exactly what the next message will look like.
-- Home Assistant discovery follows whatever the device's format is.
 
 ---
 
@@ -230,7 +232,7 @@ The translation table is a file in the repo. Any error without an entry shows "S
 
 ## 9. Not in v1
 
-Extensions/plugins, Touchlink beyond Advanced, multiple sticks, translations (English first, then the usual 16 if it goes public), Docker/HA add-on packaging.
+Home Assistant discovery (Node-RED and plain MQTT only), a login for the web page (meant for a trusted home network), extensions/plugins, Touchlink beyond Advanced, multiple sticks, translations (English first, then the usual 16 if it goes public), Docker/HA add-on packaging.
 
 ---
 
@@ -239,7 +241,9 @@ Extensions/plugins, Touchlink beyond Advanced, multiple sticks, translations (En
 No test network: we cut over on Mat's existing stick.
 1. Swarm2MQTT imports Z2M's data folder (network key, devices, names) while Z2M is still running. Nothing touches the stick yet.
 2. Stop Z2M. Start Swarm2MQTT on the same stick. Devices stay paired.
-3. If anything is wrong: stop Swarm2MQTT, start Z2M. Its folder is never written to, so going back always works.
+3. Repoint automations: change `zigbee2mqtt/` to `swarm2mqtt/` in flows and alert rules. The switching-over page lists every topic that changes.
+4. If anything is wrong: stop Swarm2MQTT, start Z2M. Its folder is never written to, so going back always works.
+5. First real join test: new devices (planned: seven radiator valves) are paired on Swarm2MQTT, not on Z2M first.
 
 ---
 
