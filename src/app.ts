@@ -5,7 +5,7 @@ import {spawn} from "node:child_process";
 import {Store, type DeviceRow, type Format, type GroupRow} from "./store.js";
 import {Radio, type Control, type RadioDevice, type RadioStatus} from "./radio/radio.js";
 import {SimRadio} from "./radio/sim.js";
-import {HerdsmanRadio, type StickConfig} from "./radio/herdsman.js";
+import {HerdsmanRadio, adapterLog, type StickConfig} from "./radio/herdsman.js";
 import {MqttBridge, DEFAULT_MQTT, type MqttSettings} from "./mqtt.js";
 import {addGap, health, type Health} from "./health.js";
 import {translate} from "./errors.js";
@@ -28,7 +28,7 @@ export class App extends EventEmitter {
   joinEndsAt = 0;
   joinFound: string[] = [];
   rejoinRows = new Map<string, DeviceRow>();
-  retryMs = 2000;
+  retryMs = 2000; retryDelay = 2000; attempts = 0; lastRadioError?: string;
   retryTimer?: NodeJS.Timeout;
   scanTimer?: NodeJS.Timeout;
   onlineCache = new Map<string, boolean>();
@@ -60,7 +60,7 @@ export class App extends EventEmitter {
     this.mqtt.start();
     this.startRadio();
     setInterval(() => {this.store.prune(); this.dailyBackup(); this.checkAvailability()}, 60e3).unref();
-    setInterval(() => this.checkAvailability(), 5e3).unref();
+    setInterval(() => {this.checkAvailability(); if (!this.radioStatus.up && this.stick) this.changed()}, 5e3).unref(); // while the adapter isn't up, the page sees its messages as they come
     this.dailyBackup();
     // look for app updates soon after starting, then hourly and whenever a page opens (at most every 10 min); the page shows a bar when one is out
     if (!this.sim) {setTimeout(() => this.checkUpdate().catch(() => {}), 5e3).unref(); setInterval(() => this.checkUpdate().catch(() => {}), 3600e3).unref()}
@@ -69,7 +69,8 @@ export class App extends EventEmitter {
   startRadio() {
     clearTimeout(this.retryTimer);
     if (!this.sim && !this.stick) {this.setRadioStatus({up: false, reason: "No Zigbee adapter set up yet."}); return}
-    if (!this.sim) this.setRadioStatus({up: false, reason: "Connecting to the Zigbee adapter…"});
+    this.attempts++;
+    if (!this.sim) this.setRadioStatus({up: false, connecting: true, reason: "Connecting to the Zigbee adapter…", since: Date.now(), attempts: this.attempts, lastError: this.lastRadioError});
     const radio: Radio = this.sim ? new SimRadio() : new HerdsmanRadio(this.stick!, this.dataDir);
     this.radio = radio;
     radio.on("status", status => {this.setRadioStatus(status); if (!status.up && radio === this.radio) this.retryRadio()});
@@ -79,15 +80,15 @@ export class App extends EventEmitter {
     radio.on("interview", (ieee, status) => this.onInterview(ieee, status));
     radio.on("left", ieee => {const device = this.store.device(ieee); if (device) this.log("warn", `${device.name} left the network.`, ieee)});
     radio.on("permitJoin", seconds => {this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()});
-    radio.start().then(() => {this.retryMs = 2000; this.syncDevices(); this.scheduleScan(5000)}).catch(error => {this.setRadioStatus({up: false, reason: translate(String(error?.message ?? error)).text}); this.log("bad", translate(String(error?.message ?? error)).text, undefined, String(error?.stack ?? error)); this.retryRadio()});
+    radio.start().then(() => {this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(5000)}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
   }
   retryRadio() {
     clearTimeout(this.retryTimer); clearTimeout(this.scanTimer);
     const radio = this.radio; this.radio = undefined; radio?.removeAllListeners(); radio?.stop().catch(() => {});
-    this.retryTimer = setTimeout(() => this.startRadio(), this.retryMs);
+    this.retryDelay = this.retryMs; this.retryTimer = setTimeout(() => this.startRadio(), this.retryMs);
     this.retryMs = Math.min(this.retryMs * 2, 60e3);
   }
-  async restartRadio() {clearTimeout(this.retryTimer); const radio = this.radio; this.radio = undefined; radio?.removeAllListeners(); await radio?.stop().catch(() => {}); this.retryMs = 2000; this.startRadio()}
+  async restartRadio() {clearTimeout(this.retryTimer); this.attempts = 0; const radio = this.radio; this.radio = undefined; radio?.removeAllListeners(); await radio?.stop().catch(() => {}); this.retryMs = 2000; this.startRadio()}
   setRadioStatus(status: RadioStatus) {const wasUp = this.radioStatus.up; this.radioStatus = status; if (wasUp !== status.up) {this.log(status.up ? "info" : "bad", status.up ? "Zigbee adapter connected." : status.reason ?? "Zigbee adapter lost."); this.mqtt.event(status.up ? "adapter_up" : "adapter_down", {text: status.reason})} this.changed()}
 
   // Bring the store in line with what the radio knows about
@@ -397,7 +398,7 @@ export class App extends EventEmitter {
   snapshot() {
     const devices = this.store.devices(), parents = this.parents(), all = new Map(devices.map(device => [device.ieee, device])), latest = this.store.linksAt();
     return {
-      version: VERSION, whatsNew: this.whatsNew, update: this.update, sim: this.sim, radio: this.radioStatus, mqtt: {connected: this.mqtt.connected, error: this.mqtt.error, settings: Object.assign({}, this.mqttSettings, {password: this.mqttSettings.password ? "••••" : ""})}, prefs: this.prefs, stickSet: !!this.stick || this.sim,
+      version: VERSION, whatsNew: this.whatsNew, update: this.update, sim: this.sim, radio: this.radioStatus.up || this.sim ? this.radioStatus : Object.assign({}, this.radioStatus, {log: adapterLog.slice(-40)}), mqtt: {connected: this.mqtt.connected, error: this.mqtt.error, settings: Object.assign({}, this.mqttSettings, {password: this.mqttSettings.password ? "••••" : ""})}, prefs: this.prefs, stickSet: !!this.stick || this.sim, stick: this.stick ? {path: this.stick.path, adapter: this.stick.adapter} : null,
       join: {endsAt: this.joinEndsAt, found: this.joinFound},
       devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
       stickIeee: this.stickIeee(), links: latest, groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),

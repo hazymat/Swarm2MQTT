@@ -1,6 +1,11 @@
 // Setup's MQTT check: connect, see who's there (any Zigbee2MQTT from its retained bridge messages), then let go
 // running = it answered a health check just now; a retained "online" alone can be left behind by an old install
 export interface Z2mFound {baseTopic: string; running: boolean; answered?: boolean; leftBehind?: boolean; version?: string; adapterPath?: string; adapterType?: "ember" | "zstack"; coordinator?: string; logRoot?: string}
+// MQTT connection errors in plain words (Settings, the header, setup)
+export function mqttErrorText(error: any): string {
+  const message = String(error?.message ?? error);
+  return /not authori[sz]ed|bad user/i.test(message) ? "The MQTT server turned down the user name or password." : /ECONNREFUSED/.test(message) ? "Nothing answers at that address and port. Is the MQTT server running?" : /ENOTFOUND|EAI_AGAIN/.test(message) ? "This machine can't find that address." : /ETIMEDOUT|EHOSTUNREACH/.test(message) ? "The MQTT server's address doesn't answer. Check it's switched on and on the network." : `Couldn't connect: ${message}`;
+}
 export async function probeMqtt(server: {url: string; username?: string; password?: string}): Promise<{ms: number; z2m: Z2mFound[]}> {
   if (!/^mqtts?:\/\/|^wss?:\/\//.test(server.url ?? "")) throw new Error("Write the address like mqtt://192.168.1.10:1883.");
   const {default: mqtt} = await import("mqtt"), started = Date.now();
@@ -8,7 +13,7 @@ export async function probeMqtt(server: {url: string; username?: string; passwor
   try {
     await new Promise<void>((resolve, reject) => {
       client.once("connect", () => resolve());
-      client.once("error", (error: any) => reject(new Error(/not authori[sz]ed|bad user/i.test(error.message) ? "The MQTT server turned down the user name or password." : /ECONNREFUSED/.test(error.message) ? "Nothing answers at that address and port." : /ENOTFOUND|EAI_AGAIN/.test(error.message) ? "This machine can't find that address." : `Couldn't connect: ${error.message}`)));
+      client.once("error", (error: any) => reject(new Error(mqttErrorText(error))));
       setTimeout(() => reject(new Error("No answer from the MQTT server within 6 seconds.")), 6500);
     });
     const ms = Date.now() - started, found = new Map<string, Z2mFound>();

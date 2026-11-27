@@ -3,7 +3,9 @@
 :root[data-theme=light]{--bg:#eef2f8;--bg-image:radial-gradient(circle at top left,rgba(143,211,255,.5) 0%,rgba(143,211,255,0) 45%),linear-gradient(135deg,#f5f7fb,#e7ecf5);--text:#1f2937;--muted:rgba(31,41,55,.68);--faint:rgba(31,41,55,.42);--glass:rgba(255,255,255,.7);--glass-hover:rgba(255,255,255,.95);--glass-border:rgba(31,41,55,.12);--bar:rgba(255,255,255,.85);--sheet:#fff;--active-border:rgba(79,143,240,.55);--shadow:0 8px 30px rgba(31,41,55,.15);--line:rgba(31,41,55,.25);--node:#fff;--code:#1e3a8a;--well:rgba(31,41,55,.06);--green:#2f9e57;--amber:#c77a1c;--red:#d9534f}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
-body{color:var(--text);background:var(--bg-image) fixed;background-color:var(--bg);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Inter,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html{background-color:var(--bg)}
+body::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--bg-image),var(--bg)} /* a fixed layer, not background-attachment:fixed, which iOS repeats every screen height */
+body{color:var(--text);background:transparent;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Inter,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 input,textarea,select,button{font:inherit;color:inherit}
 input,textarea,.selectable,code{-webkit-user-select:text;user-select:text}
 button{cursor:pointer;background:none;border:0}
@@ -61,7 +63,7 @@ select.text option{background:var(--sheet);color:var(--text)}
 body{--status-h:24px;--float-base:calc(var(--status-h) + 16px);--sel-lift:0px;--upd-lift:0px}
 body.has-select-bar{--sel-lift:58px}
 body.has-update{--upd-lift:54px}
-@media (max-width:700px){body.has-frame{--float-base:calc(var(--status-h) + 84px)}}
+@media (max-width:700px){body{--status-h:0px}body.has-frame{--float-base:calc(var(--status-h) + 84px)}} /* phones: no status bar, the version is in Settings > Updates */
 /* Show me: the changed thing pulses */
 .flash{animation:flash 0.8s ease-in-out 3;border-radius:14px}
 @keyframes flash{50%{box-shadow:0 0 0 3px var(--accent)}}

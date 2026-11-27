@@ -6,7 +6,7 @@ export type Kind = "stick" | "router" | "battery";
 export interface Control {property: string; label: string; type: "binary" | "numeric" | "enum" | "text"; writable: boolean; readable: boolean; unit?: string; min?: number; max?: number; step?: number; values?: (string | number)[]; on?: unknown; off?: unknown; setting?: boolean; guessed?: boolean}
 export interface RadioDevice {ieee: string; nwk: number; kind: Kind; model?: string; vendor?: string; description?: string; supported: boolean; controls: Control[]; interviewing: boolean; firmware?: string}
 export interface Link {child: string; parent: string; lqi: number}
-export interface RadioStatus {up: boolean; reason?: string; stick?: string; channel?: number; panId?: number}
+export interface RadioStatus {up: boolean; reason?: string; stick?: string; channel?: number; panId?: number; connecting?: boolean; since?: number; attempts?: number; lastError?: string; nextTry?: number; log?: string[]}
 export interface RadioEvents {
   status: [RadioStatus];
   state: [ieee: string, values: Record<string, unknown>, lqi?: number];

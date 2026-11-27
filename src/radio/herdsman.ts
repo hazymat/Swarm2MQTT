@@ -1,5 +1,5 @@
 // Real adapter, through zigbee-herdsman + zigbee-herdsman-converters (both MIT, by Koen Kanters and the Zigbee2MQTT community)
-import {Controller, setOtaConfiguration} from "zigbee-herdsman";
+import {Controller, setLogger, setOtaConfiguration} from "zigbee-herdsman";
 import * as zhc from "zigbee-herdsman-converters";
 import {Radio, type Control, type Kind, type Link, type RadioDevice} from "./radio.js";
 
@@ -18,6 +18,13 @@ export function toControls(exposes: any[], guessed: boolean): Control[] {
   for (const expose of exposes) walk(expose);
   return controls;
 }
+
+// What the library says while it talks to the adapter, so "can't connect" comes with the adapter's side of the story. Fine detail only while starting.
+export const adapterLog: string[] = [];
+let detailed = true;
+const keep = (level: string, message: string | (() => string), namespace: string) => {const line = `${new Date().toISOString().slice(11, 19)} ${level} ${namespace.replace(/^zh:/, "")}: ${typeof message === "function" ? message() : message}`, same = (text?: string) => text?.slice(9).replace(/\d+/g, "#"); if (same(adapterLog[adapterLog.length - 1]) === same(line)) adapterLog[adapterLog.length - 1] = line; else adapterLog.push(line); if (adapterLog.length > 200) adapterLog.splice(0, adapterLog.length - 200)};
+setLogger({debug: (message, namespace) => {if (detailed) keep("debug", message, namespace)}, info: (message, namespace) => keep("info", message, namespace), warning: (message, namespace) => keep("warn", message, namespace), error: (message, namespace) => keep("error", message, namespace)});
+const START_SECONDS = 90;
 
 export class HerdsmanRadio extends Radio {
   controller?: Controller;
@@ -47,7 +54,11 @@ export class HerdsmanRadio extends Radio {
     });
     controller.on("deviceAnnounce", data => this.libraryEvent("deviceAnnounce", data.device));
     controller.on("message", data => this.onMessage(data));
-    await controller.start();
+    detailed = true;
+    let timer: NodeJS.Timeout | undefined;
+    try {await Promise.race([controller.start(), new Promise((_, reject) => {timer = setTimeout(() => reject(new Error(`The adapter didn't finish starting within ${START_SECONDS} seconds.`)), START_SECONDS * 1000)})])}
+    finally {clearTimeout(timer)}
+    detailed = false;
     for (const device of controller.getDevicesIterator(device => device.type !== "Coordinator")) {await this.resolve(device); this.libraryEvent("start", device)}
     const parameters = await controller.getNetworkParameters(), version = await controller.getCoordinatorVersion();
     this.emit("status", {up: true, stick: version.type, channel: parameters.channel, panId: parameters.panID});

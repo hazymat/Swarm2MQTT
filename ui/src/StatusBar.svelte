@@ -14,4 +14,5 @@
   button:hover{color:var(--text)}
   .out{margin-left:auto}
   .dot{width:7px;height:7px;border-radius:50%;background:#4CC2FF}
+  @media (max-width:700px){#statusbar{display:none}}
 </style>

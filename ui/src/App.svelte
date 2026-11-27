@@ -1,7 +1,7 @@
 <script>
   import {live, undo, redo, act} from "./api.svelte.js";
   import {view, go, save} from "./ui.svelte.js";
-  import {inField} from "./util.js";
+  import {inField, adapterState} from "./util.js";
   import Icon from "./Icon.svelte";
   import Home from "./Home.svelte";
   import Groups from "./Groups.svelte";
@@ -29,7 +29,7 @@
   let status = $derived.by(() => {
     if (!snap) return null;
     if (!live.connected) return {colour: "var(--red)", text: "Lost touch with Swarm2MQTT", sub: "trying again"};
-    if (!snap.radio.up) return {colour: "var(--red)", text: snap.radio.reason ?? "Zigbee adapter not connected", sub: "", page: "settings"};
+    if (!snap.radio.up) {const adapter = adapterState(snap.radio); return {colour: adapter.colour, text: adapter.text, sub: "", page: "home", pulse: adapter.kind === "connecting"}}
     const accepted = snap.devices.filter(device => device.status === "accepted"), bad = accepted.filter(device => device.health.status === "bad"), warn = accepted.filter(device => device.health.status === "warn");
     if (bad.length) return {colour: "var(--red)", text: bad.length === 1 ? `${bad[0].name} isn't working` : `${bad.length} not working`, sub: warn.length ? `${warn.length} need a look` : "", open: bad[0].ieee};
     if (warn.length) return {colour: "var(--amber)", text: warn.length === 1 ? `${warn[0].name} needs a look` : `${warn.length} need a look`, sub: "", open: warn[0].ieee};
@@ -68,7 +68,7 @@
   <div id="page">
     <header id="topbar">
       <h1 id="page-title"><Icon name={PAGES[view.page]?.icon ?? "home"}/>{PAGES[view.page]?.label ?? "Home"}</h1>
-      {#if status}<button class="chip status" onclick={statusClick} title="Show what this is about"><span class="dot" style="background:{status.colour}"></span><b>{status.text}</b>{#if status.sub}<span class="sub">· {status.sub}</span>{/if}</button>{/if}
+      {#if status}<button class="chip status" onclick={statusClick} title="Show what this is about"><span class="dot" class:pulse={status.pulse} style="background:{status.colour}"></span><b>{status.text}</b>{#if status.sub}<span class="sub">· {status.sub}</span>{/if}</button>{/if}
       {#if snap.join.endsAt > view.now}<JoinPill/>{/if}
       <button class="iconbtn" title="Light or dark" onclick={() => {view.theme = view.theme === "light" ? "glass" : "light"; save("s2m-theme", view.theme)}}><Icon name="eye"/></button>
       {#if view.page === "home" && !(snap.join.endsAt > view.now)}<button class="plus" title="Add devices (J)" disabled={!snap.radio.up} onclick={() => act("join", {seconds: 240})}><Icon name="plus"/></button>{/if}
@@ -102,6 +102,7 @@
   .status{min-width:0;flex-shrink:1;overflow:hidden}
   .status b{overflow:hidden;text-overflow:ellipsis}
   .status .sub{color:var(--muted)}
+  .pulse{animation:pulse 1.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.3}}
   .plus:disabled{opacity:.4}
   .simbar{padding:6px 24px;font-size:13px;color:var(--muted);background:color-mix(in srgb,var(--lilac) 12%,transparent);border-bottom:1px solid var(--glass-border)}
   .content{flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto}

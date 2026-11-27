@@ -7,8 +7,9 @@
   import MapView from "./MapView.svelte";
   import DevicePanel from "./DevicePanel.svelte";
   import JoinBox from "./JoinBox.svelte";
+  import GettingRunning from "./GettingRunning.svelte";
 
-  let snap = $derived(live.snap);
+  let snap = $derived(live.snap), notRunning = $derived(!snap.sim && !snap.radio.up);
   let devices = $derived(snap.devices);
   let order = {bad: 0, warn: 1, waiting: 2, ok: 3};
   let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => order[first.health.status] - order[second.health.status] || first.name.localeCompare(second.name)));
@@ -44,6 +45,7 @@
 <svelte:window onkeydown={keydown}/>
 <div class="home">
   <div class="phonetabs tabs"><button class:on={tab === "map"} onclick={() => tab = "map"}>Map</button><button class:on={tab === "list"} onclick={() => tab = "list"}>Devices</button></div>
+  {#if notRunning}<div class="runslot" class:hide={tab !== "map"}><GettingRunning/></div>{:else}
   <section class="card mapcard" class:hide={tab !== "map"}>
     <div class="maphead">
       <span class="when">{#if view.at}<b>{dayClock(view.at)}</b>{:else}Now{/if}</span>
@@ -56,12 +58,13 @@
       <button class="chip" disabled={!snap.radio.up} onclick={() => act("rescan").then(() => toast("Map checked", null))}>Check now</button>
     </div>
     <div class="mapwrap">
-      <MapView devices={devices} links={mapLinks} stickIeee={snap.stickIeee} then={thenLinks} ghosts={view.at ? [] : ghosts} {joining} chosen={view.chosen} open={view.open} onpick={pick} onhold={hold}/>
+      {#if !snap.links.ts && !view.at && devices.length}<div class="mapwait"><span class="spin"></span>Drawing the map: asking each device who it talks through. This takes a minute or two.</div>{:else}
+      <MapView devices={devices} links={mapLinks} stickIeee={snap.stickIeee} then={thenLinks} ghosts={view.at ? [] : ghosts} {joining} chosen={view.chosen} open={view.open} onpick={pick} onhold={hold}/>{/if}
     </div>
     {#if view.compare}<div class="legend"><span><i class="l solid"></i>New route</span><span><i class="l dashed"></i>Route that went</span></div>
     {:else}<div class="legend"><span><i style="width:13px;height:13px;border-radius:3px"></i>Plugged in, passes messages on</span><span><i style="width:13px;height:13px;border-radius:50%"></i>Battery, sleeps</span><span><i style="width:22px;height:0;border-width:2px 0 0"></i>Thicker = stronger signal</span>{#if ghosts.length && !view.at}<span><i class="l ghost"></i>Old route (last day)</span>{/if}</div>{/if}
     {#if view.at && nearEvents.length}<div class="near">{#each nearEvents as event}<div><span class="faint">{dayClock(event.ts)}</span> {event.text}</div>{/each}</div>{/if}
-  </section>
+  </section>{/if}
 
   <section class="right" class:hide={tab !== "list" && !opened && !joining}>
     {#if joining}<JoinBox/>
@@ -162,4 +165,7 @@
     .checked{display:none}
     .select-bar{left:50%}
   }
+  .runslot{min-width:0;overflow-y:auto}.runslot :global(.running){margin:0}
+  .mapwait{height:100%;min-height:240px;display:flex;align-items:center;justify-content:center;gap:10px;color:var(--muted);text-align:center;padding:20px}
+  .mapwait .spin{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--blue);border-right-color:transparent;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 </style>

@@ -2,6 +2,9 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 15, text: "While the network isn't running, Home shows a live checklist: MQTT, Zigbee2MQTT stopped, the adapter (with the reason it can't connect and what to try) and what the adapter said. Setup now waits on a Start step until the network is really running."},
+  {id: 14, text: "Errors say what happened in plain words, never \"Something went wrong\". Connecting to the adapter is blue, not red; tap it to see what's going on."},
+  {id: 13, text: "Setup warns about Zigbee2MQTT's old logs, which can stop it making a backup, and gives you the command to clear them. The adapter step is now a guided 1, 2, 3."},
   {id: 12, text: "Addresses come in parts now, so there's nothing to remember: pick mqtt:// or mqtts:// (or Network or USB for the adapter), type the IP address, and the port is already filled in (1883, 8883 or 6638). Pasting a whole address splits it up for you.", go: "settings", at: "#mqtt-server"},
   {id: 11, text: "Setup: getting your network from Zigbee2MQTT waits up to 2 minutes with a running count. If it fails, the page keeps saying why, including what Zigbee2MQTT said, with Try again. Each step ends with one tidy row: Back on the left, the next action on the right. Problem pills now stay 12 seconds and have ✕."},
   {id: 10, text: "Update now stays on Updating… until the new version is running, then What's new opens. It no longer offers the update again for a moment in between."},

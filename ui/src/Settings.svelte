@@ -1,15 +1,15 @@
 <script>
   import {live, act, call, toast} from "./api.svelte.js";
-  import {view, save} from "./ui.svelte.js";
-  import {dayClock} from "./util.js";
+  import {view, save, go} from "./ui.svelte.js";
+  import {dayClock, adapterState} from "./util.js";
   import {readBackupFiles} from "./z2mzip.js";
   import AddressField from "./AddressField.svelte";
   const MQTT_KINDS = [{label: "mqtt://", scheme: "mqtt", port: 1883}, {label: "mqtts://", scheme: "mqtts", port: 8883}];
   const ADAPTER_KINDS = [{label: "Network", scheme: "tcp", port: 6638}, {label: "USB", path: true, placeholder: "/dev/ttyUSB0"}];
-  let snap = $derived(live.snap);
+  let snap = $derived(live.snap), adapter = $derived(adapterState(snap.radio));
   let mqtt = $state(Object.assign({}, live.snap.mqtt.settings));
   let prefs = $state(Object.assign({}, live.snap.prefs));
-  let advanced = $state(false), stickPath = $state(""), stickType = $state("ember"), channel = $state(""), z2mFiles = $state(null), z2mPreview = $state(null);
+  let advanced = $state(false), stickPath = $state(live.snap.stick?.path ?? ""), stickType = $state(live.snap.stick?.adapter ?? "ember"), channel = $state(""), z2mFiles = $state(null), z2mPreview = $state(null);
   async function saveMqtt() {await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password, baseTopic: mqtt.baseTopic, heartbeatSeconds: Number(mqtt.heartbeatSeconds) || 0})}
   const savePrefs = () => act("prefs", {batteryLeadDays: Number(prefs.batteryLeadDays), batteryPercent: Number(prefs.batteryPercent), stats: prefs.stats, updateChannel: prefs.updateChannel});
   let statsPreview = $derived({version: snap.version, adapter: snap.radio.stick, models: Array.from(new Set(snap.devices.map(device => device.model).filter(Boolean))).sort()});
@@ -28,13 +28,13 @@
   </section>
 
   <section class="card">
-    <h2>Zigbee adapter {#if snap.radio.up}<span class="ok">✓ {snap.radio.stick ?? "Connected"}</span>{:else}<span class="bad">{snap.radio.reason}</span>{/if}</h2>
+    <h2>Zigbee adapter <span class="state" class:pulse={adapter.kind === "connecting"} style="color:{adapter.colour}">{adapter.kind === "up" ? "✓ " : ""}{adapter.text}</span>{#if adapter.kind !== "up" && !snap.sim}<button class="link" onclick={() => go("home")}>What's wrong?</button>{/if}</h2>
     {#if snap.radio.channel}<div class="kv"><span class="k">Channel</span><span>{snap.radio.channel}</span></div>{/if}
-    <div class="kv"><span class="k">Backups</span><span class="muted">daily and before every big change, newest 14 kept</span></div>
+    <div class="subhead"><b>Backups</b><button class="pill ghost" onclick={() => act("backupNow").then(() => toast("Backed up", null))}>Back up now</button></div>
+    <p class="fieldhint">Made daily and before every big change. The newest 14 are kept.</p>
     <div class="backups">
       {#each snap.backups as backup (backup.name)}<div class="kv"><span>{dayClock(backup.ts)} <span class="faint">{backup.reason.replace(/-/g, " ")}</span></span><button class="link" onclick={() => toast(`Restoring the backup from ${dayClock(backup.ts)}`, null, "info", () => act("restore", {name: backup.name}).catch(() => {}))}>Restore</button></div>{:else}<span class="faint">None yet</span>{/each}
     </div>
-    <button class="pill ghost" onclick={() => act("backupNow").then(() => toast("Backed up", null))}>Back up now</button>
   </section>
 
   <section class="card">
@@ -45,7 +45,7 @@
 
   <section class="card" id="updates-card">
     <h2>Updates</h2>
-    <div class="kv"><span class="k">Swarm2MQTT</span><span>{snap.version}</span></div>
+    <div class="kv"><span class="k">Swarm2MQTT</span><span>{snap.version}{snap.prefs?.updateChannel === "dev" ? " · Dev" : ""} <button class="link" onclick={() => {view.whatsNewAll = true; view.whatsNew = true}}>What's new</button></span></div>
     <div class="kv"><span class="k">Channel</span><span class="seg"><button class:on={prefs.updateChannel !== "dev"} onclick={() => {prefs.updateChannel = "stable"; act("prefs", {updateChannel: "stable"})}}>Stable</button><button class:on={prefs.updateChannel === "dev"} onclick={() => {prefs.updateChannel = "dev"; act("prefs", {updateChannel: "dev"})}}>Dev</button></span></div>
     {#if snap.update?.available}
       <div class="kv"><span><span class="dot" style="background:var(--blue)"></span> {snap.update.latest} is out</span><button class="pill primary" disabled={snap.update.running} onclick={() => act("updateNow").catch(() => {})}>{snap.update.running ? "Updating…" : `Update to ${snap.update.latest}`}</button></div>
@@ -92,7 +92,9 @@
   .note{font-size:13.5px;color:var(--muted)}
   .pill{align-self:flex-start}
   .link{color:var(--accent);font-size:14px}
+  .subhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px}
+  .state{font-size:14px;font-weight:400}.pulse{animation:pulse 1.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.45}}
   .backups{display:flex;flex-direction:column;max-height:220px;overflow-y:auto}
   .h2btn{text-align:left;width:100%}
-  @media (max-width:700px){.settings{padding:12px}.kv{flex-wrap:wrap}}
+  @media (max-width:700px){.settings{padding:12px}.kv{flex-wrap:wrap}.kv .field{flex:1 1 100%;min-width:0}.kv .text{max-width:none}}
 </style>

@@ -79,6 +79,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     // setup: check the MQTT server and look for Zigbee2MQTT on it; no args = the saved server
     case "mqttProbe": {const server = args.url ? args : app.mqttSettings; if (args.password === "••••") server.password = app.mqttSettings.password; return probeMqtt(server)}
     case "mqttClearLeftBehind": return clearLeftBehind(app.mqttSettings, String(args.baseTopic ?? ""));
+    case "adapterRetry": return app.restartRadio();
     case "stickCheck": return checkStick(String(args.path ?? ""), String(args.adapter ?? "ember"));
     case "whatsNewSeen": return app.markWhatsNewSeen(Number(args.id));
     case "updateNow": return app.updateNow();

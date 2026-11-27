@@ -4,6 +4,7 @@
   import {view} from "./ui.svelte.js";
   import {readBackupFiles} from "./z2mzip.js";
   import AddressField from "./AddressField.svelte";
+  import GettingRunning from "./GettingRunning.svelte";
   const MQTT_KINDS = [{label: "mqtt://", scheme: "mqtt", port: 1883}, {label: "mqtts://", scheme: "mqtts", port: 8883}];
   const ADAPTER_KINDS = [{label: "Network", scheme: "tcp", port: 6638}, {label: "USB", path: true, placeholder: "/dev/ttyUSB0"}];
   view.wizard = true;
@@ -67,14 +68,14 @@
     try {
       if (from === "z2m") await act("z2mImport", {files, path, adapter, keepBaseTopic: true, devices: chosen});
       else await act("newNetwork", {path, adapter});
-      view.wizard = false;
+      step = 4; // stay with them until the network is actually running
     } catch (error) {finishError = error.message}
     busy = false;
   }
 </script>
 <div class="wizard">
   <div class="brand"><img src="/icon.svg" width="44" alt=""><div><h1>Swarm2MQTT</h1><span class="muted">Zigbee2MQTT, but sensible.</span></div></div>
-  <div class="steps"><span class:on={step === 1}>MQTT</span><span class:on={step === 2}>Zigbee2MQTT</span><span class:on={step === 3}>Adapter</span></div>
+  <div class="steps"><span class:on={step === 1}>MQTT</span><span class:on={step === 2}>Zigbee2MQTT</span><span class:on={step === 3}>Adapter</span><span class:on={step === 4}>Start</span></div>
   {#if step === 1}
     <section class="card">
       <h2>Your MQTT server</h2>
@@ -153,6 +154,16 @@
         <div class="alt"><button onclick={() => {network = null; files = null}}>Get it again</button></div>
       {/if}
       <div class="foot"><button class="quiet" onclick={() => step = 1}>‹ Back</button><button class="pill primary" disabled={!from || (from === "z2m" && !network)} onclick={() => step = 3}>Next ›</button></div>
+    </section>
+  {:else if step === 4}
+    <section class="card">
+      <h2>{snap.radio.up ? "Your network is running" : "Starting your network"}</h2>
+      {#if snap.radio.up}<div class="headline ok"><span class="big">✓</span>All set: {snap.devices.filter(device => device.status === "accepted").length} devices on channel {snap.radio.channel}</div>{/if}
+      <GettingRunning wizard/>
+      <div class="foot">
+        {#if snap.radio.up}<span class="spacer"></span><button class="pill primary" onclick={() => view.wizard = false}>Open Swarm2MQTT ›</button>
+        {:else}<button class="quiet" onclick={() => view.wizard = false}>Finish later</button><span class="muted small">Swarm2MQTT keeps trying by itself.</span>{/if}
+      </div>
     </section>
   {:else}
     <section class="card">

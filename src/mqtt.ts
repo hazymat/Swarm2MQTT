@@ -1,3 +1,4 @@
+import {mqttErrorText} from "./mqttprobe.js";
 // MQTT bridge: base topic, per-device topic and format, bridge state with last will, heartbeat, events
 import mqtt, {type MqttClient} from "mqtt";
 import type {DeviceRow, GroupRow} from "./store.js";
@@ -34,7 +35,7 @@ export class MqttBridge {
       this.beat();
     });
     this.client.on("close", () => {if (this.connected) {this.connected = false; this.onStatus()}});
-    this.client.on("error", error => {this.error = String(error.message || error); this.connected = false; this.onStatus()});
+    this.client.on("error", error => {this.error = mqttErrorText(error); this.connected = false; this.onStatus()});
     this.client.on("message", (topic, payload) => {if (topic.endsWith("/set")) this.onSet(topic.slice(this.base.length + 1), payload.toString())});
     this.restartHeartbeat();
   }

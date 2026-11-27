@@ -66,3 +66,10 @@ export function holdable(onHold, onTap) {
     oncontextmenu(event) {event.preventDefault()},
   };
 }
+// The adapter in one word and one colour, the same everywhere it shows (header, Settings, Home): connecting is blue and pulses, only a real failure is red
+export function adapterState(radio) {
+  if (radio.up) return {kind: "up", colour: "var(--green)", text: radio.stick ?? "Connected"};
+  if (radio.connecting) return {kind: "connecting", colour: "var(--blue)", text: radio.attempts > 1 ? `Connecting to the adapter… (try ${radio.attempts})` : "Connecting to the adapter…"};
+  if (/no zigbee adapter set up/i.test(radio.reason ?? "")) return {kind: "none", colour: "var(--red)", text: "No adapter set up"};
+  return {kind: "failed", colour: "var(--red)", text: "Can't connect to the adapter"};
+}
