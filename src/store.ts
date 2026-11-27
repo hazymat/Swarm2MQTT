@@ -1,4 +1,4 @@
-// SQLite store: the source of truth for the UI, so the page keeps working when the stick doesn't
+// SQLite store: the source of truth for the UI, so the page keeps working when the adapter doesn't
 import {DatabaseSync} from "node:sqlite";
 import type {Control, Kind} from "./radio/radio.js";
 

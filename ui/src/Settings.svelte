@@ -9,7 +9,7 @@
   let advanced = $state(false), stickPath = $state(""), stickType = $state("ember"), channel = $state(""), z2mFiles = $state(null), z2mPreview = $state(null);
   async function saveMqtt() {await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password, baseTopic: mqtt.baseTopic, heartbeatSeconds: Number(mqtt.heartbeatSeconds) || 0})}
   const savePrefs = () => act("prefs", {batteryLeadDays: Number(prefs.batteryLeadDays), batteryPercent: Number(prefs.batteryPercent), stats: prefs.stats, updateChannel: prefs.updateChannel});
-  let statsPreview = $derived({version: snap.version, stick: snap.radio.stick, models: Array.from(new Set(snap.devices.map(device => device.model).filter(Boolean))).sort()});
+  let statsPreview = $derived({version: snap.version, adapter: snap.radio.stick, models: Array.from(new Set(snap.devices.map(device => device.model).filter(Boolean))).sort()});
   function exportSettings() {const data = {exported: new Date().toISOString(), version: snap.version, mqtt: Object.assign({}, snap.mqtt.settings, {password: undefined}), prefs: snap.prefs, devices: snap.devices.map(device => ({ieee: device.ieee, name: device.name, topic: device.topic, format: device.format, renames: device.renames})), groups: snap.groups, scenes: snap.scenes}; const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type: "application/json"})); link.download = "swarm2mqtt-settings.json"; link.click()}
 </script>
 <div class="settings">
@@ -20,12 +20,12 @@
     <div class="kv"><span class="k">Password</span><input class="text" type="password" bind:value={mqtt.password} autocomplete="new-password"></div>
     <div class="kv"><span class="k">Base topic</span><input class="text" bind:value={mqtt.baseTopic}></div>
     <div class="kv"><span class="k">Heartbeat every</span><span class="unit"><input class="text num" type="number" min="0" bind:value={mqtt.heartbeatSeconds}> s</span></div>
-    <p class="note">Sends <code>{mqtt.baseTopic}/bridge/tele</code> with uptime, stick and device counts, so anything watching knows Swarm2MQTT is alive. <code>{mqtt.baseTopic}/bridge/state</code> says online or offline. 0 turns the heartbeat off.</p>
+    <p class="note">Sends <code>{mqtt.baseTopic}/bridge/tele</code> with uptime, adapter and device counts, so anything watching knows Swarm2MQTT is alive. <code>{mqtt.baseTopic}/bridge/state</code> says online or offline. 0 turns the heartbeat off.</p>
     <button class="pill primary" onclick={saveMqtt}>Save</button>
   </section>
 
   <section class="card">
-    <h2>Zigbee stick {#if snap.radio.up}<span class="ok">✓ {snap.radio.stick ?? "Connected"}</span>{:else}<span class="bad">{snap.radio.reason}</span>{/if}</h2>
+    <h2>Zigbee adapter {#if snap.radio.up}<span class="ok">✓ {snap.radio.stick ?? "Connected"}</span>{:else}<span class="bad">{snap.radio.reason}</span>{/if}</h2>
     {#if snap.radio.channel}<div class="kv"><span class="k">Channel</span><span>{snap.radio.channel}</span></div>{/if}
     <div class="kv"><span class="k">Backups</span><span class="muted">daily and before every big change, newest 14 kept</span></div>
     <div class="backups">
@@ -62,17 +62,17 @@
 
   <section class="card">
     <h2>Help improve Swarm2MQTT <button class="switch" class:on={prefs.stats} onclick={() => {prefs.stats = !prefs.stats; savePrefs()}} aria-label="Send anonymous stats"></button></h2>
-    <p class="note">Off unless you turn it on. When on, only this would be sent: which device models and stick you use, never names, addresses or readings.</p>
+    <p class="note">Off unless you turn it on. When on, only this would be sent: which device models and adapter you use, never names, addresses or readings.</p>
     <div class="code"><code>{JSON.stringify(statsPreview)}</code></div>
   </section>
 
   <section class="card">
     <button class="h2btn" onclick={() => advanced = !advanced}><h2>Advanced {advanced ? "▾" : "▸"}</h2></button>
     {#if advanced}
-      <div class="kv"><span class="k">Stick address</span><input class="text" placeholder="tcp://192.168.1.20:6638 or /dev/ttyUSB0" bind:value={stickPath}><span class="seg"><button class:on={stickType === "ember"} onclick={() => stickType = "ember"}>Ember</button><button class:on={stickType === "zstack"} onclick={() => stickType = "zstack"}>Z-Stack</button></span><button class="pill ghost" disabled={!stickPath} onclick={() => act("stickPath", {path: stickPath, adapter: stickType})}>Use</button></div>
+      <div class="kv"><span class="k">Adapter address</span><input class="text" placeholder="tcp://192.168.1.20:6638 or /dev/ttyUSB0" bind:value={stickPath}><span class="seg"><button class:on={stickType === "ember"} onclick={() => stickType = "ember"}>Ember</button><button class:on={stickType === "zstack"} onclick={() => stickType = "zstack"}>Z-Stack</button></span><button class="pill ghost" disabled={!stickPath} onclick={() => act("stickPath", {path: stickPath, adapter: stickType})}>Use</button></div>
       <div class="kv"><span class="k">Channel</span><span class="unit"><input class="text num" type="number" min="11" max="26" placeholder={String(snap.radio.channel ?? "")} bind:value={channel}><button class="pill ghost" disabled={!Number(channel)} onclick={() => toast(`Changing to channel ${channel}. Some devices may need to rejoin.`, null, "info", () => act("channel", {channel: Number(channel)}).catch(() => {}))}>Change</button></span></div>
       <div class="kv"><span class="k">Import from Zigbee2MQTT</span><label class="pill ghost">Pick its backup zip<input type="file" accept=".zip,application/zip" hidden onchange={event => readBackupZip(event.currentTarget.files[0]).then(files => {z2mFiles = files; return call("z2mPreview", {files})}).then(result => z2mPreview = result).catch(error => toast(error.message, null, "bad"))}></label><span class="muted">In Zigbee2MQTT: Settings &gt; Tools &gt; Request Zigbee2MQTT backup</span></div>
-      {#if z2mPreview}<div class="callout info"><span class="t">Found {z2mPreview.summary}. Stop Zigbee2MQTT first: only one can use the stick.</span><button class="pill" onclick={() => act("z2mImport", {files: z2mFiles, keepBaseTopic: true}).then(() => z2mPreview = null)}>Import</button></div>{/if}
+      {#if z2mPreview}<div class="callout info"><span class="t">Found {z2mPreview.summary}. Stop Zigbee2MQTT first: only one can use the adapter.</span><button class="pill" onclick={() => act("z2mImport", {files: z2mFiles, keepBaseTopic: true}).then(() => z2mPreview = null)}>Import</button></div>{/if}
     {/if}
   </section>
 </div>

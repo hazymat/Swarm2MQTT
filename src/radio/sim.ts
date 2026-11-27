@@ -1,4 +1,4 @@
-// Fake stick and devices, so the app runs (and can be shown) without any Zigbee hardware
+// Fake adapter and devices, so the app runs (and can be shown) without any Zigbee hardware
 import {Radio, type Control, type Link, type RadioDevice} from "./radio.js";
 
 const onOff: Control = {property: "state", label: "On/off", type: "binary", writable: true, readable: true, on: "ON", off: "OFF"};
@@ -36,7 +36,7 @@ export class SimRadio extends Radio {
     ];
   }
   async start() {
-    this.emit("status", {up: true, stick: "Simulated stick", channel: 20, panId: 0x1a62});
+    this.emit("status", {up: true, stick: "Simulated adapter", channel: 20, panId: 0x1a62});
     // speed up time 60x so check-ins show quickly: a device that reports every 600 s reports every 10 s
     for (const device of this.devices) this.timers.push(setInterval(() => this.report(device), device.every * 1000 / 60));
     for (const device of this.devices) setTimeout(() => this.report(device), 200);

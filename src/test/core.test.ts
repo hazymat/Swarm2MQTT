@@ -70,7 +70,7 @@ test("end to end with the simulator: MQTT out and in, holding area, undo, heartb
   try {
     await until(() => seen.get("s2m/bridge/state") === '{"state":"online"}');
     await until(() => seen.has("s2m/bridge/tele"));
-    assert.equal(JSON.parse(seen.get("s2m/bridge/tele")!).stick, "up");
+    assert.equal(JSON.parse(seen.get("s2m/bridge/tele")!).adapter, "up");
     await until(() => app.store.devices().length === 9);
     const plug = app.store.device("0xa4c1380000000101")!;
     await until(() => seen.has(`s2m/${plug.topic}`));

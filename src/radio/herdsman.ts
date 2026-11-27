@@ -1,4 +1,4 @@
-// Real stick, through zigbee-herdsman + zigbee-herdsman-converters (both MIT, by Koen Kanters and the Zigbee2MQTT community)
+// Real adapter, through zigbee-herdsman + zigbee-herdsman-converters (both MIT, by Koen Kanters and the Zigbee2MQTT community)
 import {Controller, setOtaConfiguration} from "zigbee-herdsman";
 import * as zhc from "zigbee-herdsman-converters";
 import {Radio, type Control, type Kind, type Link, type RadioDevice} from "./radio.js";
@@ -35,7 +35,7 @@ export class HerdsmanRadio extends Radio {
       acceptJoiningDeviceHandler: async () => true, // the app holds new devices in "Waiting for you" instead
     });
     this.controller = controller;
-    controller.on("adapterDisconnected", () => this.emit("status", {up: false, reason: "Lost the Zigbee stick."}));
+    controller.on("adapterDisconnected", () => this.emit("status", {up: false, reason: "Lost the Zigbee adapter."}));
     controller.on("permitJoinChanged", data => this.emit("permitJoin", data.permitted ? data.time ?? 1 : 0));
     controller.on("deviceJoined", data => this.emit("joined", data.device.ieeeAddr));
     controller.on("deviceLeave", data => this.emit("left", data.ieeeAddr));
@@ -108,7 +108,7 @@ export class HerdsmanRadio extends Radio {
   async remove(ieee: string) {const device = this.device(ieee); await device.removeFromNetwork(); this.definitions.delete(ieee); this.states.delete(ieee)}
   async permitJoin(seconds: number) {await this.controller!.permitJoin(seconds)}
 
-  // Who talks through whom: each router's neighbour table lists its children; routers hang off the strongest neighbour nearer the stick
+  // Who talks through whom: each router's neighbour table lists its children; routers hang off the strongest neighbour nearer the adapter
   async scanLinks(): Promise<Link[]> {
     const controller = this.controller!, links: Link[] = [], depth = new Map<string, number>(), routerNeighbours = new Map<string, {ieee: string; lqi: number}[]>();
     const coordinator = controller.getDevicesByType("Coordinator")[0];
@@ -149,6 +149,6 @@ export class HerdsmanRadio extends Radio {
   otaMetas(ieee: string) {const ota = this.definitions.get(ieee)?.ota; return typeof ota === "object" ? ota : {}}
   async checkFirmware(ieee: string) {const result = await this.device(ieee).checkOta({}, undefined, this.otaMetas(ieee)); return result.available}
   async updateFirmware(ieee: string, progress: (percent: number, secondsLeft?: number) => void) {await this.device(ieee).updateOta({}, undefined, undefined, this.otaMetas(ieee), (percent, remaining) => progress(percent, remaining), OTA_SETTINGS)}
-  // energy scan isn't exposed by herdsman for every stick; without it the channel is left to the default list (§12)
+  // energy scan isn't exposed by herdsman for every adapter; without it the channel is left to the default list (§12)
   async scanChannels(): Promise<Record<number, number>> {return {}}
 }

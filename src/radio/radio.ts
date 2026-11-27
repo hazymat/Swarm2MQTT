@@ -1,4 +1,4 @@
-// The one interface the rest of the app sees. HerdsmanRadio talks to a real stick, SimRadio fakes one.
+// The one interface the rest of the app sees. HerdsmanRadio talks to a real adapter, SimRadio fakes one.
 import {EventEmitter} from "node:events";
 
 export type Kind = "stick" | "router" | "battery";

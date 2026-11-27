@@ -29,7 +29,7 @@
   let status = $derived.by(() => {
     if (!snap) return null;
     if (!live.connected) return {colour: "var(--red)", text: "Lost touch with Swarm2MQTT", sub: "trying again"};
-    if (!snap.radio.up) return {colour: "var(--red)", text: snap.radio.reason ?? "Zigbee stick not connected", sub: "", page: "settings"};
+    if (!snap.radio.up) return {colour: "var(--red)", text: snap.radio.reason ?? "Zigbee adapter not connected", sub: "", page: "settings"};
     const accepted = snap.devices.filter(device => device.status === "accepted"), bad = accepted.filter(device => device.health.status === "bad"), warn = accepted.filter(device => device.health.status === "warn");
     if (bad.length) return {colour: "var(--red)", text: bad.length === 1 ? `${bad[0].name} isn't working` : `${bad.length} not working`, sub: warn.length ? `${warn.length} need a look` : "", open: bad[0].ieee};
     if (warn.length) return {colour: "var(--amber)", text: warn.length === 1 ? `${warn[0].name} needs a look` : `${warn.length} need a look`, sub: "", open: warn[0].ieee};
@@ -74,7 +74,7 @@
       {#if view.page === "home" && !(snap.join.endsAt > view.now)}<button class="plus" title="Add devices (J)" disabled={!snap.radio.up} onclick={() => act("join", {seconds: 240})}><Icon name="plus"/></button>{/if}
       {#if view.page === "groups"}<button class="plus" title="New group" onclick={() => act("groupCreate", {name: "New group", members: view.chosen})}><Icon name="plus"/></button>{/if}
     </header>
-    {#if snap.sim}<div class="simbar">Simulator: no real stick. Devices and messages are made up, and time runs 60x faster.</div>{/if}
+    {#if snap.sim}<div class="simbar">Simulator: no real adapter. Devices and messages are made up, and time runs 60x faster.</div>{/if}
     <main class="content">
       {#if view.page === "groups"}<Groups/>
       {:else if view.page === "activity" || view.page === "history"}<Activity/>

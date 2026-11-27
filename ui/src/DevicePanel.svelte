@@ -16,8 +16,8 @@
   let common = $derived(settings.slice(0, 3)), rest = $derived(settings.slice(3));
   let moreSettings = $state(false), moreDetails = $state(false), moreRenames = $state(false), addOpen = $state(false);
   let extra = $derived(Object.keys(device.state).filter(key => key !== "linkquality" && !device.controls.some(control => control.property === key && !hidden.has(key))));
-  let nameOf = ieee => ieee === snap.stickIeee ? "Stick" : snap.devices.find(other => other.ieee === ieee)?.name ?? "?";
-  // talks through: walk parents to the stick
+  let nameOf = ieee => ieee === snap.stickIeee ? "Adapter" : snap.devices.find(other => other.ieee === ieee)?.name ?? "?";
+  // talks through: walk parents to the adapter
   let chain = $derived.by(() => {const parents = new Map(snap.links.links.map(link => [link.child, link.parent])), out = [device.ieee]; let at = device.ieee; for (let step = 0; step < 8 && parents.get(at); step++) {at = parents.get(at); out.push(at)} return out});
   // 30-day history for the strip and graphs, loaded when the panel opens
   let routes = $state([]), battery = $state([]), signal = $state([]);

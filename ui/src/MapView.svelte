@@ -1,5 +1,5 @@
 <script>
-  // The radio map: stick in the middle, plugged-in devices as squares, battery devices as circles, lines for "talks through"
+  // The radio map: adapter in the middle, plugged-in devices as squares, battery devices as circles, lines for "talks through"
   import {KIND_SHAPES, shapeOf, STATUS_COLOUR} from "./util.js";
   import {save} from "./ui.svelte.js";
   let {devices, links, stickIeee, then = null, ghosts = [], joining = false, chosen = [], open = null, onpick, onhold} = $props();
@@ -55,7 +55,7 @@
     {#each [48, 70, 94] as radius, index}<circle class="beacon" cx={CX} cy={CY} r={radius} style="animation-delay:{index * .35}s"/>{/each}{/if}
   <g class="node" onpointerdown={event => event.stopPropagation()}>
     <path d="M{CX} {CY - 34}l29.5 17v34L{CX} {CY + 34}l-29.5-17v-34z" fill="#2a2a33" stroke="#f2c14e" stroke-width="3"/><circle cx={CX} cy={CY} r="8" fill="#f2c14e"/>
-    <text x={CX} y={CY + 58}>Stick</text>
+    <text x={CX} y={CY + 58}>Adapter</text>
   </g>
   {#each devices as device (device.ieee)}
     {@const position = at(device.ieee)}

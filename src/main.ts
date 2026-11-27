@@ -5,7 +5,7 @@ import {fileURLToPath} from "node:url";
 
 const args = process.argv.slice(2), flag = (name: string) => args.includes(`--${name}`), option = (name: string, fallback: string) => {const index = args.indexOf(`--${name}`); return index >= 0 ? args[index + 1] : process.env[`SWARM2MQTT_${name.toUpperCase()}`] ?? fallback};
 const dataDir = resolve(option("data", "./data")), port = Number(option("port", "8080")), uiDir = resolve(dirname(fileURLToPath(import.meta.url)), "ui");
-// the service never exits because of the stick or a library bug: log and carry on
+// the service never exits because of the adapter or a library bug: log and carry on
 process.on("uncaughtException", error => console.error("Unexpected error (kept running):", error));
 process.on("unhandledRejection", error => console.error("Unexpected error (kept running):", error));
 // node:sqlite still prints an "experimental" notice; hide just that one

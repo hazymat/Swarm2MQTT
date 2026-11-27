@@ -48,7 +48,7 @@ export function readZ2m(files: Z2mFiles): Z2mImport {
   const mqttConfig = config.mqtt ?? {}, mqtt: Partial<MqttSettings> = {url: resolve(mqttConfig.server), username: resolve(mqttConfig.user), password: resolve(mqttConfig.password), baseTopic: mqttConfig.base_topic ?? "zigbee2mqtt"};
   return {stick, devices, groups, mqtt, summary: `${devices.length} ${devices.length === 1 ? "device" : "devices"}, ${groups.length} ${groups.length === 1 ? "group" : "groups"}, channel ${channel}`};
 }
-// Write herdsman's own files into our data folder, so the stick carries on with the same network
+// Write herdsman's own files into our data folder, so the adapter carries on with the same network
 export function writeZ2mFiles(files: Z2mFiles, dataDir: string) {
   writeFileSync(`${dataDir}/herdsman.db`, files["database.db"]);
   if (files["coordinator_backup.json"]) writeFileSync(`${dataDir}/coordinator_backup.json`, files["coordinator_backup.json"]);

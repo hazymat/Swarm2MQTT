@@ -17,12 +17,12 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 | # | Headline | The complaint | Done when |
 |---|---|---|---|
 | P1 | **Errors in plain English** | "zh:ember: Delivery of BROADCAST failed for '65532' [apsFrame=…]" | No message shown to the user contains a library prefix, hex, JSON, cluster or profile numbers. Raw text lives only behind "Technical details". |
-| P2 | **Every error is about something you can see** | Red and blue toasts floating in a corner with no link to anything | Each problem is pinned to the device, router, stick or setting it's about, and appears there. No background toasts. |
+| P2 | **Every error is about something you can see** | Red and blue toasts floating in a corner with no link to anything | Each problem is pinned to the device, router, adapter or setting it's about, and appears there. No background toasts. |
 | P3 | **Shows you what's actually wrong** | "Inability to show me what's actually wrong" | Each offline device shows a one-line reason and one fix button (see §5). |
 | P4 | **See the knock-on effect** | "If one device goes out and it causes another to go out, show it" | When a router drops, every device that relied on it is drawn as "cut off by Hall plug", not just "offline". |
 | P5 | **The map is always there** | Map page is blank with a "Load map" button | Topology scans run in the background. The map opens instantly with the last scan and its age. |
 | P6 | **No ghost devices** | Devices last seen months ago, "Unsupported", red Z icon | Devices not heard from for 30 days move to a "Gone quiet" shelf with Remove / Keep. Unsupported devices say what they are and what's missing. |
-| P7 | **Repairs itself** | "Inability to repair itself" | Stick reconnects on its own, setup that failed retries on its own, devices that stop reporting are re-told on their own (§4). |
+| P7 | **Repairs itself** | "Inability to repair itself" | Adapter reconnects on its own, setup that failed retries on its own, devices that stop reporting are re-told on their own (§4). |
 | P8 | **Colours you can explain** | Red and blue toasts at random | Only three status colours, each matching a label on screen: green = fine, amber = needs a look, red = not working. Blue = updates only. |
 
 ### One view of everything
@@ -39,10 +39,10 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 
 | # | Headline | The complaint | Done when |
 |---|---|---|---|
-| P14 | **Works even when the stick doesn't** | UI won't show up when the adapter is unavailable | The UI, settings, logs, last known states and the map all load with the stick unplugged. A banner says "Zigbee stick not found" with what to check. |
+| P14 | **Works even when the adapter doesn't** | UI won't show up when the adapter is unavailable | The UI, settings, logs, last known states and the map all load with the adapter unplugged. A banner says "Zigbee adapter not found" with what to check. |
 | P15 | **Starts with nothing** | Won't start without a hand-written config | First run opens a setup wizard. No file needs to exist. |
 | P16 | **No YAML. Ever.** | "Get a comma wrong and nothing works" | Everything is set in the UI. A settings file can be exported and imported for scripting. A broken file never stops startup: bad entries are skipped and listed in Settings. |
-| P17 | **Finds your stick for you** | Hand-typing serial ports and adapter types | Wizard lists plugged-in sticks by name, picks the adapter type itself. |
+| P17 | **Finds your adapter for you** | Hand-typing serial ports and adapter types | Wizard lists plugged-in adapters by name, picks the adapter type itself. |
 
 ### Made for MQTT
 
@@ -59,8 +59,8 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 |---|---|---|---|
 | P22 | **Setup happens by itself** | "Interview" means nothing | No "Interview" button or word. A new device shows "Getting to know Kitchen sensor…" then is ready. Repeats only after a firmware update or if it failed partway. |
 | P23 | **No "Reconfigure" button** | "What config? The device has it" | Reporting set-up is redone automatically when a device goes quiet but is still reachable. One "Fix" button covers the rare manual case. |
-| P24 | **Adding devices is one obvious button** | "Disable join (All)" with a mystery dropdown | One "Add devices" button. While open, a beacon pulses on the stick and on every listening router, with a countdown and a helper: "Your network key is being handed out. Don't leave this on." |
-| P25 | **The UI teaches Zigbee** | "Show me visually or contextually" | Routers, battery devices and the stick have different shapes on the map. Lines show who talks through whom. Hover a term once and it explains itself. |
+| P24 | **Adding devices is one obvious button** | "Disable join (All)" with a mystery dropdown | One "Add devices" button. While open, a beacon pulses on the adapter and on every listening router, with a countdown and a helper: "Your network key is being handed out. Don't leave this on." |
+| P25 | **The UI teaches Zigbee** | "Show me visually or contextually" | Routers, battery devices and the adapter have different shapes on the map. Lines show who talks through whom. Hover a term once and it explains itself. |
 | P26 | **Groups that make sense** | "What is a group? Why might I want one?" | Groups page leads with "Turn several lights on together, instantly, with no popcorn effect." Creating one starts from selecting devices on the map. |
 | P27 | **Four menu items, not fourteen** | Eight top items + cog + sub-tabs + sub-sub-tabs | Home, Groups, Activity, Settings: a sidebar on a computer, a bar at the bottom on a phone. No second row of tabs anywhere. |
 | P28 | **Advanced stays out of the way** | Blocklist, adapter delay, extended PAN ID next to everyday settings | Niche options live under one collapsed "Advanced" section at the bottom of Settings. |
@@ -85,18 +85,18 @@ Swarm2MQTT service (Node + TypeScript, always running)
    ├─ State store (SQLite): devices, last states, topology history, settings, event log
    ├─ MQTT bridge: per-device topics and formats, bridge online/offline state
    ├─ Health engine: reasons, knock-on effects, automatic repairs
-   └─ Radio supervisor ── zigbee-herdsman (talks to the stick)
+   └─ Radio supervisor ── zigbee-herdsman (talks to the adapter)
                           zigbee-herdsman-converters (device library)
 ```
 
-- **The service never exits because of the stick.** The radio supervisor owns herdsman. If the stick is missing or crashes, the supervisor marks the radio down, retries with backoff, and everything else keeps running. This is the core change from Z2M, which stops when the adapter fails.
+- **The service never exits because of the adapter.** The radio supervisor owns herdsman. If the adapter is missing or crashes, the supervisor marks the radio down, retries with backoff, and everything else keeps running. This is the core change from Z2M, which stops when the adapter fails.
 - **The store is the source of truth for the UI**, not herdsman's live state. That's what makes P14 possible.
 - **Settings live in the store**, edited through the UI. Export/import as JSON (or YAML, same content).
 - Runs on Linux as a Node service under systemd, installed with one command. No Docker in v1.
 - Updates: an in-app **Update now** button pulls GitHub releases. Two channels like WinSqueeze: every merge to main is a dev build, a chosen dev build is promoted to stable.
 - Same front-end stack and DESIGN.md as WinSqueeze.
 
-**Challenge considered and rejected:** just writing a new front end for Zigbee2MQTT. Z2M does allow custom front ends, but the UI would still vanish when the stick goes (P14), YAML would still exist (P16), per-device formats (P19) need changes inside Z2M. Building on the two libraries Z2M itself uses gets all of that and keeps device support.
+**Challenge considered and rejected:** just writing a new front end for Zigbee2MQTT. Z2M does allow custom front ends, but the UI would still vanish when the adapter goes (P14), YAML would still exist (P16), per-device formats (P19) need changes inside Z2M. Building on the two libraries Z2M itself uses gets all of that and keeps device support.
 
 ---
 
@@ -121,13 +121,13 @@ Applied here:
 - **Hints:** first-run callouts with their own ✕ (Sift's `hintHtml`), never paragraphs of help text.
 
 ### 3.1 Setup wizard (first run, or Settings > Start again)
-1. **Your stick.** Lists plugged-in sticks by name ("Sonoff ZBDongle-E"). One click. "Mine isn't listed" shows unplug/replug hint.
+1. **Your adapter.** Lists plugged-in adapters by name ("Sonoff ZBDongle-E"). One click. "Mine isn't listed" shows unplug/replug hint.
 2. **Coming from Zigbee2MQTT?** Yes: drop its backup zip, we import network, devices, names and groups (P31). No: create a new network (keys generated, never shown).
 3. **MQTT.** Server address, user, password, with a live "Connected" tick. "Skip, I don't use MQTT" allowed.
 4. **Done.** Lands on Home with "Add devices" glowing if the network is empty.
 
 ### 3.2 Home
-- **Left: map.** Stick in the centre, routers as squares, battery devices as circles, lines for "talks through". Line thickness = signal. Problems use the status colours. Drag to rearrange, positions remembered. No rooms or floor plans: the map is the radio map.
+- **Left: map.** Adapter in the centre, routers as squares, battery devices as circles, lines for "talks through". Line thickness = signal. Problems use the status colours. Drag to rearrange, positions remembered. No rooms or floor plans: the map is the radio map.
 - **Rewind:** ◀ ▶ under the map hop to the previous or next mesh change, with its time. **Compare** overlays that moment on now: routes that went are dashed, new ones solid with a halo. Route discovery listens to normal traffic and rejoins, plus a full scan every 6 hours and on demand.
 - **Route switches live:** the line slides to the new router and a faint dashed ghost of the old route fades over a day. Clicking the ghost says what changed and when.
 - **Right: list.** Picture, name, signal bars, battery, last heard. Sorted problems-first. Search box. Clicking a row highlights it on the map and vice versa.
@@ -138,7 +138,7 @@ Applied here:
 - Picture, name (click to rename). A new device keeps its model name until renamed.
 - **Controls** generated from the device library: switches, sliders, colour, readings.
 - **Health line:** "Fine", or the reason and one Fix button (§5).
-- **How it connects:** "Talks through Hall plug → stick". Plain words, mirrors the map.
+- **How it connects:** "Talks through Hall plug → adapter". Plain words, mirrors the map.
 - **Route strip:** 30 days as a bar, one segment per router it used, gaps where offline; every colour named on tap. Tap a point to rewind the map there.
 - **Signal graph:** each link's quality over 30 days.
 - **Check-ins:** what was learnt, e.g. "Usually reports every 12 min (learnt over 9 days). Counted offline after 40 min of silence." Small chart of recent gaps. "Learning…" with the fallback times until enough check-ins. Override allowed, undoable.
@@ -149,7 +149,7 @@ Applied here:
 
 ### 3.4 Add devices
 - Button turns into a ring counting down 4 minutes, with a Stop button.
-- **Beacon:** while open, the stick and every listening router pulse with expanding rings on the map, and the header pill pulses too, so it's visible from any page. Click a router to stop it listening (replaces the "(All)" dropdown).
+- **Beacon:** while open, the adapter and every listening router pulse with expanding rings on the map, and the header pill pulses too, so it's visible from any page. Click a router to stop it listening (replaces the "(All)" dropdown).
 - **Helper** under the countdown, always shown while open: "While this is on, any device nearby can join and is handed your network key, including a neighbour's. Turn it off once your device is in."
 - Panel text: "Put your device in pairing mode now. Usually: hold the button 5 seconds." Pulls the device-specific tip when known.
 - Each new device appears live: "Found a device… Getting to know it… Ready. Name it?"
@@ -162,10 +162,10 @@ Plain-English timeline ("Kitchen sensor went quiet. Hall plug was switched off a
 
 ### 3.7 Settings (one page of cards, top to bottom)
 1. MQTT
-2. Zigbee stick (status, change stick, backup network)
+2. Zigbee adapter (status, change adapter, backup network)
 3. Updates (app and device library)
 4. Export / import settings
-5. Anonymous stats (off): opt in to send device models and stick type only, with a preview of exactly what's sent
+5. Anonymous stats (off): opt in to send device models and adapter type only, with a preview of exactly what's sent
 6. Advanced (collapsed): channel, blocklist/passlist, Touchlink, adapter delay, extended PAN ID, Green Power, network key backup.
 
 ---
@@ -174,7 +174,7 @@ Plain-English timeline ("Kitchen sensor went quiet. Hall plug was switched off a
 
 | Situation | What Swarm2MQTT does by itself | What the user sees |
 |---|---|---|
-| Stick unplugged or crashed | Retry every 5 s, then 30 s | Banner, last states greyed with "as of 14:02" |
+| Adapter unplugged or crashed | Retry every 5 s, then 30 s | Banner, last states greyed with "as of 14:02" |
 | New device setup stopped halfway (battery device fell asleep) | Retries next time the device wakes | "Press any button on it to finish setup" |
 | Firmware updated | Re-reads what the device can do | Nothing, unless new controls appear |
 | Device stopped reporting but answers when asked | Re-sends reporting set-up (Z2M's "reconfigure") | Nothing; Activity notes it |
@@ -195,7 +195,7 @@ Rule: every message names the thing, says what happened in its terms, and offers
 | Device offline (availability) | "Kitchen sensor hasn't been heard from for 3 hours. Its battery was at 1%." → Replace battery | Device panel, map |
 | Device offline, parent router offline | "Cut off: it talks through Hall plug, which is off." → Show Hall plug | Device panel, map |
 | Interview failed | "Couldn't finish setting up. Press any button on it to wake it." | Device panel |
-| Adapter disconnected | "Zigbee stick not found. Check it's plugged in." | Banner |
+| Adapter disconnected | "Zigbee adapter not found. Check it's plugged in." | Banner |
 | MQTT connect failed | "Can't reach your MQTT server at 10.x.x.x. Wrong password?" | Settings > MQTT, header pill |
 | Unsupported device | "We know this is a Tuya device but not which one, so it has no controls yet." → Copy details to request support | Device panel |
 
@@ -208,7 +208,7 @@ The translation table is a file in the repo. Any error without an entry shows "S
 - **Base topic:** set in Settings > MQTT, default `swarm2mqtt`. Every topic, including `bridge/…`, sits under it. Setting it to `zigbee2mqtt` lets existing flows keep working unchanged.
 - **Device topic:** `<base>/<name>` (P21), editable per device.
 - **Bridge state:** `<base>/bridge/state` is retained `online`/`offline`, with `offline` set as the MQTT last will.
-- **Heartbeat:** `<base>/bridge/tele` every 60 s by default (Settings > MQTT, can be changed or turned off): uptime, stick up/down, devices online/total. Anything watching Swarm2MQTT just checks these keep arriving.
+- **Heartbeat:** `<base>/bridge/tele` every 60 s by default (Settings > MQTT, can be changed or turned off): uptime, adapter up/down, devices online/total. Anything watching Swarm2MQTT just checks these keep arriving.
 - **Format**, per device, three choices:
   - One message: `…/kitchen_sensor` → `{"occupancy":true,"battery":80}`
   - One topic per value: `…/kitchen_sensor/occupancy` → `true`
@@ -221,7 +221,7 @@ The translation table is a file in the repo. Any error without an entry shows "S
 
 ## 7. Answers the UI must give without words (from the rant)
 
-- **Coordinator** = the stick. Drawn at the centre of the map, labelled "Stick".
+- **Coordinator** = the adapter. Drawn at the centre of the map, labelled "Adapter".
 - **Why join turns itself off:** when a device joins, it's handed the network's key, and most devices accept it using a default code everyone knows. While open, a neighbour's bulb in pairing mode can join your network, and someone nearby with a radio could catch the key. Shown as the pulsing beacon and helper in §3.4.
 - **Routers vs battery devices:** shape on the map; hover says "Plugged-in devices pass messages on. Battery devices sleep and rely on one."
 - **Groups:** one command to many devices at once, so lights change together instead of one by one.
@@ -239,15 +239,15 @@ The translation table is a file in the repo. Any error without an entry shows "S
 
 ## 9. Not in v1
 
-Home Assistant discovery (Node-RED and plain MQTT only), a login for the web page (meant for a trusted home network), extensions/plugins, Touchlink beyond Advanced, multiple sticks, translations (English first, then the usual 16), Docker/HA add-on packaging.
+Home Assistant discovery (Node-RED and plain MQTT only), a login for the web page (meant for a trusted home network), extensions/plugins, Touchlink beyond Advanced, multiple adapters, translations (English first, then the usual 16), Docker/HA add-on packaging.
 
 ---
 
 ## 10. Switching over
 
-No test network: we cut over on Mat's existing stick.
+No test network: we cut over on Mat's existing adapter.
 1. Request a backup zip from Z2M's web page, then stop Z2M. Swarm2MQTT imports the zip (network key, devices, names).
-2. Stop Z2M. Start Swarm2MQTT on the same stick. Devices stay paired.
+2. Stop Z2M. Start Swarm2MQTT on the same adapter. Devices stay paired.
 3. Either set the base topic to `zigbee2mqtt` so nothing else changes, or keep `swarm2mqtt` and repoint flows later. The switching-over page lists every topic that differs.
 4. If anything is wrong: stop Swarm2MQTT, start Z2M. Its folder is never written to, so going back always works.
 
@@ -265,7 +265,7 @@ Rejected: Plainbee, Zigview, Zigherd, ZigMQTT (and any Zig- name), BeeMQTT, Zigb
 
 ## 12. Product decisions (v1)
 
-- **Sticks:** Ember and Z-Stack. Any other stick gets "This stick isn't supported yet" with its name, never a crash. No model-specific workarounds in the app.
+- **Adapters:** Ember and Z-Stack. Any other adapter gets "This adapter isn't supported yet" with its name, never a crash. No model-specific workarounds in the app.
 - **New devices wait for you.** A joined device goes to **Waiting for you** and sends no MQTT until accepted. Accept or reject, both undoable (a reject is undone by the guided rejoin).
 - **Unknown devices** get best-guess controls built from what the device reports, marked "guessed". You can remove, change or re-add them, and add others from the device's list of everything it reports. Undoable.
 - **Firmware updates:** one tap per device. Blue "Update available", progress and time left. Never automatic.
@@ -291,8 +291,8 @@ Rejected: Plainbee, Zigview, Zigherd, ZigMQTT (and any Zig- name), BeeMQTT, Zigb
 Built: everything in §12, the setup wizard, Home (map with rewind, compare and ghost routes; list; device panel with route strip, signal, check-ins, battery, MQTT, direct control, firmware), Groups with scenes, Activity linked to the map, Settings, simulator, install and update script, dev and stable releases.
 
 Not yet:
-- Tried on a real stick. The herdsman side compiles and handles a missing stick, but nothing has paired through it yet.
-- Channel scan: herdsman has no energy scan for every stick, so a new network uses channel 20 unless a scan result exists.
+- Tried on a real adapter. The herdsman side compiles and handles a missing adapter, but nothing has paired through it yet.
+- Channel scan: herdsman has no energy scan for every adapter, so a new network uses channel 20 unless a scan result exists.
 - Your changes: undo and redo go back in order; undoing one older entry on its own comes later.
 - Dragging rows into your own order (the map nodes and the phone bar already drag).
 

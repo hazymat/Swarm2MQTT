@@ -36,7 +36,7 @@ export function health(device: DeviceRow, now: number, parentOf: (ieee: string) 
   if (typeof device.state.battery === "number") {const daysLeft = batteryDaysLeft(batteryPoints), percent = device.state.battery as number; result.battery = {percent, daysLeft, warn: daysLeft !== undefined ? daysLeft < batteryLeadDays : percent <= batteryPercent}}
   if (device.status === "waiting") {result.status = "waiting"; result.reason = "Waiting for you to accept or reject it"; return result}
   if (!online) {
-    // cut off: something between it and the stick is down
+    // cut off: something between it and the adapter is down
     let parent = parentOf(device.ieee), guard = 0;
     while (parent && guard++ < 10) {if (!isOnline(parent)) {result.cutOffBy = parent; break} parent = parentOf(parent)}
     result.status = "bad";

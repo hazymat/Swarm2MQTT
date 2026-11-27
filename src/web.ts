@@ -89,7 +89,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "z2mPreview": {const result = readZ2m(z2mFiles(args)); return {summary: result.summary, devices: result.devices.map(device => device.name), baseTopic: result.mqtt.baseTopic, hasMqtt: !!result.mqtt.url, path: result.stick.path}}
     case "z2mImport": {
       const files = z2mFiles(args), result = readZ2m(files);
-      // the stick typed in the wizard (or the one already set up) wins over Zigbee2MQTT's own setting
+      // the adapter typed in the wizard (or the one already set up) wins over Zigbee2MQTT's own setting
       result.stick.path = args.path || app.stick?.path || result.stick.path; result.stick.adapter = args.adapter || app.stick?.adapter || result.stick.adapter;
       app.backup("before-import");
       writeZ2mFiles(files, app.dataDir);
@@ -110,8 +110,8 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
       app.log("info", `New Zigbee network made on channel ${stick.channel}.`);
       return {channel: stick.channel};
     }
-    case "stickPath": {const stick = app.stick; if (!stick) throw new Error("No stick set up yet."); app.applySetting("stick", Object.assign({}, stick, {path: args.path, adapter: args.adapter ?? stick.adapter})); return}
-    case "channel": {const stick = app.stick; if (!stick) throw new Error("No stick set up yet."); app.backup("before-channel"); app.applySetting("stick", Object.assign({}, stick, {channel: args.channel})); app.log("warn", `Channel changed to ${args.channel}. Some devices may need to rejoin.`); return}
+    case "stickPath": {const stick = app.stick; if (!stick) throw new Error("No adapter set up yet."); app.applySetting("stick", Object.assign({}, stick, {path: args.path, adapter: args.adapter ?? stick.adapter})); return}
+    case "channel": {const stick = app.stick; if (!stick) throw new Error("No adapter set up yet."); app.backup("before-channel"); app.applySetting("stick", Object.assign({}, stick, {channel: args.channel})); app.log("warn", `Channel changed to ${args.channel}. Some devices may need to rejoin.`); return}
     default: throw new Error(`Unknown command ${name}`);
   }
 }

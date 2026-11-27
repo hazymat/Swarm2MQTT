@@ -1,4 +1,4 @@
-// The app: ties the store, the radio supervisor, MQTT and the web page together. Never exits because of the stick.
+// The app: ties the store, the radio supervisor, MQTT and the web page together. Never exits because of the adapter.
 import {EventEmitter} from "node:events";
 import {copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {spawn} from "node:child_process";
@@ -68,7 +68,7 @@ export class App extends EventEmitter {
   // Radio supervisor: start, and on any failure mark it down and try again with backoff. Everything else keeps running.
   startRadio() {
     clearTimeout(this.retryTimer);
-    if (!this.sim && !this.stick) {this.setRadioStatus({up: false, reason: "No Zigbee stick set up yet."}); return}
+    if (!this.sim && !this.stick) {this.setRadioStatus({up: false, reason: "No Zigbee adapter set up yet."}); return}
     const radio: Radio = this.sim ? new SimRadio() : new HerdsmanRadio(this.stick!, this.dataDir);
     this.radio = radio;
     radio.on("status", status => {this.setRadioStatus(status); if (!status.up && radio === this.radio) this.retryRadio()});
@@ -87,7 +87,7 @@ export class App extends EventEmitter {
     this.retryMs = Math.min(this.retryMs * 2, 60e3);
   }
   async restartRadio() {clearTimeout(this.retryTimer); const radio = this.radio; this.radio = undefined; radio?.removeAllListeners(); await radio?.stop().catch(() => {}); this.retryMs = 2000; this.startRadio()}
-  setRadioStatus(status: RadioStatus) {const wasUp = this.radioStatus.up; this.radioStatus = status; if (wasUp !== status.up) {this.log(status.up ? "info" : "bad", status.up ? "Zigbee stick connected." : status.reason ?? "Zigbee stick lost."); this.mqtt.event(status.up ? "stick_up" : "stick_down", {text: status.reason})} this.changed()}
+  setRadioStatus(status: RadioStatus) {const wasUp = this.radioStatus.up; this.radioStatus = status; if (wasUp !== status.up) {this.log(status.up ? "info" : "bad", status.up ? "Zigbee adapter connected." : status.reason ?? "Zigbee adapter lost."); this.mqtt.event(status.up ? "stick_up" : "stick_down", {text: status.reason})} this.changed()}
 
   // Bring the store in line with what the radio knows about
   syncDevices() {for (const radioDevice of this.radio?.list() ?? []) this.upsert(radioDevice, false); this.changed()}
@@ -152,7 +152,7 @@ export class App extends EventEmitter {
     const all = devices ?? new Map(this.store.devices().map(row => [row.ieee, row])), now = Date.now(), prefs = this.prefs;
     const stickIeee = this.stickIeee();
     const isOnline = (ieee: string) => ieee === stickIeee ? this.radioStatus.up : (() => {const row = all.get(ieee); return !!row && health(row, now, () => undefined, () => true, () => "", [], prefs.batteryLeadDays, prefs.batteryPercent).online})();
-    return health(device, now, ieee => parents.get(ieee), isOnline, ieee => ieee === stickIeee ? "the stick" : all.get(ieee)?.name ?? ieee, typeof device.state.battery === "number" ? this.store.history(device.ieee, "battery") : [], prefs.batteryLeadDays, prefs.batteryPercent);
+    return health(device, now, ieee => parents.get(ieee), isOnline, ieee => ieee === stickIeee ? "the adapter" : all.get(ieee)?.name ?? ieee, typeof device.state.battery === "number" ? this.store.history(device.ieee, "battery") : [], prefs.batteryLeadDays, prefs.batteryPercent);
   }
   stickIeee() {const links = this.store.linksAt().links, children = new Set(links.map(link => link.child)); return links.find(link => !children.has(link.parent))?.parent ?? "stick"}
 
@@ -162,7 +162,7 @@ export class App extends EventEmitter {
     try {
       const links = await this.radio.scanLinks(), before = this.parents();
       this.store.saveLinks(links);
-      for (const link of links) {const old = before.get(link.child); if (old && old !== link.parent) {const name = (ieee: string) => this.store.device(ieee)?.name ?? "the stick"; this.log("info", `${name(link.child)} now talks through ${name(link.parent)} instead of ${name(old)}.`, link.child)}}
+      for (const link of links) {const old = before.get(link.child); if (old && old !== link.parent) {const name = (ieee: string) => this.store.device(ieee)?.name ?? "the adapter"; this.log("info", `${name(link.child)} now talks through ${name(link.parent)} instead of ${name(old)}.`, link.child)}}
       this.changed();
     } catch (error) {this.log("warn", "Couldn't finish checking who talks through whom. Will try again later.", undefined, String(error))}
   }
@@ -186,7 +186,7 @@ export class App extends EventEmitter {
 
   // ---------- commands from the web page ----------
   need(ieee: string) {const device = this.store.device(ieee); if (!device) throw new Error("That device isn't known."); return device}
-  requireRadio() {if (!this.radio || !this.radioStatus.up) throw new Error("The Zigbee stick isn't connected, so this can't reach the device right now."); return this.radio}
+  requireRadio() {if (!this.radio || !this.radioStatus.up) throw new Error("The Zigbee adapter isn't connected, so this can't reach the device right now."); return this.radio}
   async setValues(ieee: string, values: Record<string, unknown>) {
     const device = this.need(ieee);
     try {await this.requireRadio().set(ieee, values)} catch (error) {const message = translate(String((error as Error).message), device.name); this.log("warn", message.text, ieee, String(error)); throw new Error(message.text)}
@@ -388,7 +388,7 @@ export class App extends EventEmitter {
   }
 
   log(level: "info" | "warn" | "bad", text: string, ieee?: string, tech?: string) {const event = this.store.log(level, text, ieee, tech); this.emit("event", event); return event}
-  tele() {const devices = this.store.devices().filter(device => device.status === "accepted"), parents = this.parents(), all = new Map(devices.map(device => [device.ieee, device])); return {uptime: Math.round((Date.now() - this.startedAt) / 1000), stick: this.radioStatus.up ? "up" : "down", devices_online: devices.filter(device => this.healthOf(device, parents, all).online).length, devices_total: devices.length, version: VERSION}}
+  tele() {const devices = this.store.devices().filter(device => device.status === "accepted"), parents = this.parents(), all = new Map(devices.map(device => [device.ieee, device])); return {uptime: Math.round((Date.now() - this.startedAt) / 1000), adapter: this.radioStatus.up ? "up" : "down", devices_online: devices.filter(device => this.healthOf(device, parents, all).online).length, devices_total: devices.length, version: VERSION}}
   // debounced "something changed" so the page redraws once, not per message
   changeTimer?: NodeJS.Timeout;
   changed() {if (!this.changeTimer) this.changeTimer = setTimeout(() => {this.changeTimer = undefined; this.emit("changed")}, 150)}

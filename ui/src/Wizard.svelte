@@ -4,11 +4,11 @@
   import {readBackupZip} from "./z2mzip.js";
   let step = $state(1), path = $state(""), adapter = $state("ember"), from = $state(null), files = $state(null), fileName = $state(""), preview = $state(null), busy = $state(false), dragging = $state(false);
   let mqtt = $state({url: "", username: "", password: ""}), checks = $state(null);
-  // brief, read-only look at the stick: nothing is sent to it and it's let go at once, so Zigbee2MQTT can still use it
+  // brief, read-only look at the adapter: nothing is sent to it and it's let go at once, so Zigbee2MQTT can still use it
   async function checkStick() {busy = true; try {checks = await call("stickCheck", {path, adapter})} catch (error) {toast(error.message, null, "bad")} busy = false}
   function useSuggestion(suggest) {if (suggest.path) path = suggest.path; if (suggest.adapter) adapter = suggest.adapter; checkStick()}
   view.wizard = true;
-  const HINTS = {ember: {likely: "tcp://<IP address>:6638", likelyWhere: "for a stick on your network (SMLIGHT and similar)", other: "/dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "/dev/ttyUSB0", likelyWhere: "for a stick plugged into this machine (Sonoff P, CC2652)", other: "tcp://<IP address>:6638", otherWhere: "on your network"}};
+  const HINTS = {ember: {likely: "tcp://<IP address>:6638", likelyWhere: "for an adapter on your network (SMLIGHT and similar)", other: "/dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "/dev/ttyUSB0", likelyWhere: "for an adapter plugged into this machine (Sonoff P, CC2652)", other: "tcp://<IP address>:6638", otherWhere: "on your network"}};
   let hint = $derived(HINTS[adapter]);
   async function pickZip(file) {
     if (!file) return; busy = true; preview = null; fileName = file.name;
@@ -26,10 +26,10 @@
 </script>
 <div class="wizard">
   <div class="brand"><img src="/icon.svg" width="44" alt=""><div><h1>Swarm2MQTT</h1><span class="muted">Zigbee2MQTT, but sensible.</span></div></div>
-  <div class="steps"><span class:on={step === 1}>Stick</span><span class:on={step === 2}>Network</span><span class:on={step === 3}>MQTT</span></div>
+  <div class="steps"><span class:on={step === 1}>Adapter</span><span class:on={step === 2}>Network</span><span class:on={step === 3}>MQTT</span></div>
   {#if step === 1}
     <section class="card">
-      <h2>Where is your Zigbee stick?</h2>
+      <h2>Where is your Zigbee adapter?</h2>
       <div class="seg"><button class:on={adapter === "ember"} onclick={() => {adapter = "ember"; checks = null}}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => {adapter = "zstack"; checks = null}}>Z-Stack (Sonoff P, CC2652)</button></div>
       <input class="text" placeholder={hint.likely} bind:value={path} oninput={() => checks = null} onkeydown={event => {if (event.key === "Enter" && path && !busy) checkStick()}}>
       <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: <code>{hint.likely}</code><br>Or, {hint.otherWhere}: <code>{hint.other}</code></span></div>
@@ -42,7 +42,7 @@
           <button class="pill ghost" disabled={busy} onclick={checkStick}>{busy ? "Checking…" : "Check again"}</button>
           {#if checks.result === "bad"}<button class="link" onclick={() => step = 2}>Carry on anyway ›</button>{:else}<button class="pill primary" onclick={() => step = 2}>Next</button>{/if}
         </div>
-      {:else}<button class="pill primary" disabled={!path || path.includes("<") || busy} onclick={checkStick}>{busy ? "Checking…" : "Check the stick"}</button>{/if}
+      {:else}<button class="pill primary" disabled={!path || path.includes("<") || busy} onclick={checkStick}>{busy ? "Checking…" : "Check the adapter"}</button>{/if}
     </section>
   {:else if step === 2}
     <section class="card">
@@ -55,14 +55,14 @@
         <ol class="howto">
           <li>Open Zigbee2MQTT's web page. If you've stopped it, start it again for a minute.</li>
           <li>Go to <b>Settings &gt; Tools &gt; Request Zigbee2MQTT backup</b>. A zip downloads.</li>
-          <li>Stop Zigbee2MQTT. Only one of them can use the stick.</li>
+          <li>Stop Zigbee2MQTT. Only one of them can use the adapter.</li>
           <li>Drop the zip here.</li>
         </ol>
         <label class="drop" class:dragging ondragover={event => {event.preventDefault(); dragging = true}} ondragleave={() => dragging = false} ondrop={event => {event.preventDefault(); dragging = false; pickZip(event.dataTransfer.files[0])}}>
           <input type="file" accept=".zip,application/zip" hidden onchange={event => pickZip(event.currentTarget.files[0])}>
           {#if busy && !preview}Reading {fileName}…{:else if preview}✓ {fileName}{:else}Drop the zip here, or click to pick it{/if}
         </label>
-        {#if preview}<div class="callout info"><span class="t">Found {preview.summary}{preview.hasMqtt ? ", and the MQTT server" : ""}. The stick from the first step is used: <code>{path}</code></span></div>
+        {#if preview}<div class="callout info"><span class="t">Found {preview.summary}{preview.hasMqtt ? ", and the MQTT server" : ""}. The adapter from the first step is used: <code>{path}</code></span></div>
           <button class="pill primary" disabled={busy} onclick={importZ2m}>Bring it over</button>{/if}
       {:else if from === "new"}<button class="pill primary" disabled={busy} onclick={newNetwork}>Make the network</button>{/if}
       <button class="link" onclick={() => step = 1}>‹ Back</button>
