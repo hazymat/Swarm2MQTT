@@ -121,9 +121,9 @@ Applied here:
 - **Hints:** first-run callouts with their own ✕ (Sift's `hintHtml`), never paragraphs of help text.
 
 ### 3.1 Setup wizard (first run, or Settings > Start again)
-1. **Your adapter.** Lists plugged-in adapters by name ("Sonoff ZBDongle-E"). One click. "Mine isn't listed" shows unplug/replug hint.
-2. **Coming from Zigbee2MQTT?** Yes: drop its backup zip, we import network, devices, names and groups (P31). No: create a new network (keys generated, never shown).
-3. **MQTT.** Server address, user, password, with a live "Connected" tick. "Skip, I don't use MQTT" allowed.
+1. **MQTT first**, because it's also how Swarm2MQTT asks Zigbee2MQTT for its network. Address, user, password; a green tick when it connects, plus any Zigbee2MQTT found there (version, topic, running or stopped, its adapter). Skip allowed.
+2. **Coming from Zigbee2MQTT?** Yes: Swarm2MQTT asks it over MQTT (`bridge/request/backup`) for its data folder; network, devices, names and groups are shown, devices ticked to bring over (unticked ones wait in the holding area). Dropping its files or a zip is the fallback (P31). No: a new network (keys generated, never shown).
+3. **The adapter.** Filled in from Zigbee2MQTT when moving over. Check the adapter: brief, read-only looks (address, connection, model and firmware from its web page, USB device, permission, in use, type), each with a fix; when moving over, also whether Zigbee2MQTT has stopped. Check again, or carry on anyway. Then Bring it over / Make the network.
 4. **Done.** Lands on Home with "Add devices" glowing if the network is empty.
 
 ### 3.2 Home
