@@ -280,6 +280,8 @@ Rejected: Plainbee, Zigview, Zigherd, ZigMQTT (and any Zig- name), BeeMQTT, Zigb
 - **Groups** stay (one command reaches many devices at once). No rooms, no floor plans.
 - **Notifications:** none of its own. Problems show on the page and go out on `<base>/bridge/event`; your own tools notify you.
 - **Offline** is learnt per device and shown (§3.3).
+- **Battery warning:** predicted from the 30-day trend; warns a set time ahead, default 3 weeks (Settings). Devices without a usable trend use a % threshold, also a setting.
+- **Radio channel (new networks only):** scans at first setup and picks the quietest of 15, 20 or 25, which sit between the usual WiFi channels. Imported networks keep theirs. Changeable in Advanced, warning that some devices may need to rejoin. (Z2M simply uses 11 with no scan.)
 - **Stats:** opt-in only (§3.7).
 - **Install:** Linux, Node service, one command; in-app Update now; dev and stable channels (§2).
 - **Not in v1:** Home Assistant discovery, a login for the web page (§9).
