@@ -7,6 +7,7 @@ import {WebSocketServer, type WebSocket} from "ws";
 import type {App} from "./app.js";
 import {folderFiles, pickFiles, readZ2m, writeZ2mFiles, type Z2mFiles} from "./importz2m.js";
 import type {StickConfig} from "./radio/herdsman.js";
+import {checkStick} from "./stickcheck.js";
 
 const TYPES: Record<string, string> = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json", ".ico": "image/x-icon"};
 const QUIET_CHANNELS = [15, 20, 25];
@@ -72,6 +73,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "mqtt": {const value = Object.assign({}, args); if (value.password === "••••") delete value.password; return app.setSetting("mqtt", value, "MQTT settings changed")}
     case "prefs": {const result = app.setSetting("prefs", args, args.updateChannel ? `Updates: ${args.updateChannel} channel` : "Settings changed"); if (args.updateChannel) app.checkUpdate().catch(() => {}); return result}
     case "updateCheck": return app.checkUpdate();
+    case "stickCheck": return checkStick(String(args.path ?? ""), String(args.adapter ?? "ember"));
     case "whatsNewSeen": return app.markWhatsNewSeen(Number(args.id));
     case "updateNow": return app.updateNow();
     case "undo": return app.undo();

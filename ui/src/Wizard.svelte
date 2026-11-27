@@ -3,7 +3,10 @@
   import {view} from "./ui.svelte.js";
   import {readBackupZip} from "./z2mzip.js";
   let step = $state(1), path = $state(""), adapter = $state("ember"), from = $state(null), files = $state(null), fileName = $state(""), preview = $state(null), busy = $state(false), dragging = $state(false);
-  let mqtt = $state({url: "", username: "", password: ""});
+  let mqtt = $state({url: "", username: "", password: ""}), checks = $state(null);
+  // brief, read-only look at the stick: nothing is sent to it and it's let go at once, so Zigbee2MQTT can still use it
+  async function checkStick() {busy = true; try {checks = await call("stickCheck", {path, adapter})} catch (error) {toast(error.message, null, "bad")} busy = false}
+  function useSuggestion(suggest) {if (suggest.path) path = suggest.path; if (suggest.adapter) adapter = suggest.adapter; checkStick()}
   view.wizard = true;
   const HINTS = {ember: {likely: "tcp://<IP address>:6638", likelyWhere: "for a stick on your network (SMLIGHT and similar)", other: "/dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "/dev/ttyUSB0", likelyWhere: "for a stick plugged into this machine (Sonoff P, CC2652)", other: "tcp://<IP address>:6638", otherWhere: "on your network"}};
   let hint = $derived(HINTS[adapter]);
@@ -27,10 +30,19 @@
   {#if step === 1}
     <section class="card">
       <h2>Where is your Zigbee stick?</h2>
-      <div class="seg"><button class:on={adapter === "ember"} onclick={() => adapter = "ember"}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => adapter = "zstack"}>Z-Stack (Sonoff P, CC2652)</button></div>
-      <input class="text" placeholder={hint.likely} bind:value={path}>
+      <div class="seg"><button class:on={adapter === "ember"} onclick={() => {adapter = "ember"; checks = null}}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => {adapter = "zstack"; checks = null}}>Z-Stack (Sonoff P, CC2652)</button></div>
+      <input class="text" placeholder={hint.likely} bind:value={path} oninput={() => checks = null} onkeydown={event => {if (event.key === "Enter" && path && !busy) checkStick()}}>
       <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: <code>{hint.likely}</code><br>Or, {hint.otherWhere}: <code>{hint.other}</code></span></div>
-      <button class="pill primary" disabled={!path || path.includes("<")} onclick={() => step = 2}>Next</button>
+      {#if checks}
+        <div class="headline {checks.result}"><span class="big">{checks.result === "bad" ? "✕" : "✓"}</span>{checks.headline}</div>
+        <ul class="checks">
+          {#each checks.checks as check}<li class={check.result}><span class="mark">{check.result === "ok" ? "✓" : check.result === "warn" ? "!" : "✕"}</span><div><b>{check.label}</b> {check.text}{#if check.fix}<div class="muted">{check.fix}</div>{/if}{#if check.suggest}<button class="link" onclick={() => useSuggestion(check.suggest)}>Use {check.suggest.path ?? (check.suggest.adapter === "zstack" ? "Z-Stack" : "Ember")}</button>{/if}</div></li>{/each}
+        </ul>
+        <div class="row">
+          <button class="pill ghost" disabled={busy} onclick={checkStick}>{busy ? "Checking…" : "Check again"}</button>
+          {#if checks.result === "bad"}<button class="link" onclick={() => step = 2}>Carry on anyway ›</button>{:else}<button class="pill primary" onclick={() => step = 2}>Next</button>{/if}
+        </div>
+      {:else}<button class="pill primary" disabled={!path || path.includes("<") || busy} onclick={checkStick}>{busy ? "Checking…" : "Check the stick"}</button>{/if}
     </section>
   {:else if step === 2}
     <section class="card">
@@ -79,6 +91,18 @@
   .two,.row{display:flex;gap:8px}
   .pill{align-self:flex-start}
   .link{color:var(--accent);align-self:flex-start}
+  .headline{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:500;padding:12px 14px;border-radius:14px;color:var(--text);background:color-mix(in srgb,var(--green) 14%,transparent);border:1px solid color-mix(in srgb,var(--green) 45%,transparent)}
+  .headline.warn{background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
+  .headline.bad{background:color-mix(in srgb,var(--red) 14%,transparent);border-color:color-mix(in srgb,var(--red) 45%,transparent)}
+  .big{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:16px;font-weight:700;color:var(--on-tint);background:var(--green)}
+  .headline.warn .big{background:var(--amber)}.headline.bad .big{background:var(--red)}
+  .checks li.ok,.checks li.warn,.checks li.bad{color:var(--text)}
+  .checks{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .checks li{display:flex;gap:10px;align-items:flex-start;font-size:14.5px}
+  .checks .muted{font-size:13.5px}
+  .mark{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--on-tint)}
+  .ok .mark{background:var(--green)}.warn .mark{background:var(--amber)}.bad .mark{background:var(--red)}
+  .row{align-items:center}
   .hint code,.callout code{font-family:ui-monospace,monospace;font-size:13px;white-space:nowrap}
   .howto{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:14.5px}
   .drop{display:flex;align-items:center;justify-content:center;min-height:84px;padding:12px;border-radius:14px;border:1.5px dashed var(--glass-border);cursor:pointer;color:var(--muted);text-align:center}
