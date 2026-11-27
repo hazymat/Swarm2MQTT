@@ -51,7 +51,7 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 | P18 | **Each device gets its own MQTT topic** | Only possible by putting slashes in its name | Topic is its own field on the device, separate from the display name. |
 | P19 | **Choose the message format per device** | Can't shape the JSON or split it into paths | Per device: one JSON message, one topic per value, or both. Optional field renaming. |
 | P20 | **MQTT is the first thing in Settings** | MQTT is tab 8 of a sub-sub-menu | MQTT is the first card in Settings. |
-| P21 | **Switching is one find-and-replace** *(added)* | — | Topics and message shapes match Zigbee2MQTT's under a `swarm2mqtt/` prefix, so automations move over by changing the prefix. |
+| P21 | **Switching is one find-and-replace** *(added)* | — | Topics and message shapes match Zigbee2MQTT's. The base topic is a setting (default `swarm2mqtt`), so it can stay `zigbee2mqtt` and automations don't notice the switch. |
 
 ### No jargon
 
@@ -199,9 +199,10 @@ The translation table is a file in the repo. Any error without an entry shows "S
 
 ## 6. MQTT per device
 
-- **Topic:** defaults to `swarm2mqtt/<name>` (P21). Editable per device; the global prefix lives in Settings > MQTT.
-- **Bridge state:** `swarm2mqtt/bridge/state` is retained `online`/`offline`, with `offline` set as the MQTT last will.
-- **Heartbeat:** `swarm2mqtt/bridge/tele` every 60 s by default (Settings > MQTT, can be changed or turned off): uptime, stick up/down, devices online/total. Anything watching Swarm2MQTT just checks these keep arriving.
+- **Base topic:** set in Settings > MQTT, default `swarm2mqtt`. Every topic, including `bridge/…`, sits under it. Setting it to `zigbee2mqtt` lets existing flows keep working unchanged.
+- **Device topic:** `<base>/<name>` (P21), editable per device.
+- **Bridge state:** `<base>/bridge/state` is retained `online`/`offline`, with `offline` set as the MQTT last will.
+- **Heartbeat:** `<base>/bridge/tele` every 60 s by default (Settings > MQTT, can be changed or turned off): uptime, stick up/down, devices online/total. Anything watching Swarm2MQTT just checks these keep arriving.
 - **Format**, per device, three choices:
   - One message: `…/kitchen_sensor` → `{"occupancy":true,"battery":80}`
   - One topic per value: `…/kitchen_sensor/occupancy` → `true`
@@ -241,7 +242,7 @@ Home Assistant discovery (Node-RED and plain MQTT only), a login for the web pag
 No test network: we cut over on Mat's existing stick.
 1. Swarm2MQTT imports Z2M's data folder (network key, devices, names) while Z2M is still running. Nothing touches the stick yet.
 2. Stop Z2M. Start Swarm2MQTT on the same stick. Devices stay paired.
-3. Repoint automations: change `zigbee2mqtt/` to `swarm2mqtt/` in flows and alert rules. The switching-over page lists every topic that changes.
+3. Either set the base topic to `zigbee2mqtt` so nothing else changes, or keep `swarm2mqtt` and repoint flows later. The switching-over page lists every topic that differs.
 4. If anything is wrong: stop Swarm2MQTT, start Z2M. Its folder is never written to, so going back always works.
 
 ---
