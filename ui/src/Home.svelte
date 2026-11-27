@@ -21,7 +21,7 @@
   let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.note ?? "") + " " + (device.vendor ?? "") + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => order[first.health.status] - order[second.health.status] || first.name.localeCompare(second.name)));
   let waiting = $derived(devices.filter(device => device.status === "waiting"));
   let joining = $derived(snap.join.endsAt > view.now);
-  let tab = $state("map"); // phone only: Map | Devices
+  let tab = $state("list"); // phone only: Devices | Map
   let opened = $derived(devices.find(device => device.ieee === view.open));
 
   // rewind: hop between moments the mesh changed
@@ -50,7 +50,7 @@
 
 <svelte:window onkeydown={keydown}/>
 <div class="home">
-  <div class="phonetabs tabs"><button class:on={tab === "map"} onclick={() => tab = "map"}>Map</button><button class:on={tab === "list"} onclick={() => tab = "list"}>Devices</button></div>
+  <div class="phonetabs tabs"><button class:on={tab === "list"} onclick={() => tab = "list"}>Devices</button><button class:on={tab === "map"} onclick={() => tab = "map"}>Map</button></div>
   {#if notRunning}<div class="runslot" class:hide={tab !== "map"}><GettingRunning/></div>{:else}
   <section class="card mapcard" class:hide={tab !== "map"}>
     <div class="maphead">
