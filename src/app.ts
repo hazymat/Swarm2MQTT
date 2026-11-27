@@ -36,7 +36,7 @@ export class App extends EventEmitter {
   retryTimer?: NodeJS.Timeout;
   scanTimer?: NodeJS.Timeout;
   signals = new Map<string, {rssi: number; lqi?: number; at: number}>(); // strength of the last frame heard from each device, as the adapter measured it
-  strays = new Set<string>(); // found on the network but missing from the device list
+  strays = new Set<string>(); unreset = new Set<string>(); // removed without answering: if it turns up again, it wasn't reset // found on the network but missing from the device list
   scanSoon = false;
   onlineCache = new Map<string, boolean>();
   firmwareProgress = new Map<string, {percent: number; secondsLeft?: number}>();
@@ -143,8 +143,8 @@ export class App extends EventEmitter {
     this.joinWatch.step(ieee, "joined");
     const radioDevice = this.radio?.list().find(candidate => candidate.ieee === ieee);
     const device = radioDevice ? this.upsert(radioDevice, true) : undefined;
-    const stray = this.strays.delete(ieee);
-    if (device) {this.log("info", stray ? `Found ${device.name} on your network. It wasn't in the device list, so it's waiting for you.` : device.status === "waiting" ? `A new device joined: ${device.name}. It's waiting for you.` : `${device.name} rejoined.`, ieee); this.mqtt.event("device_joined", {ieee, name: device.name})}
+    const stray = this.strays.delete(ieee), notReset = this.unreset.delete(ieee);
+    if (device) {this.log("info", notReset ? `${device.name} came back without being reset: it still had your network. It's being set up from scratch.` : stray ? `Found ${device.name} on your network. It wasn't in the device list, so it's waiting for you.` : device.status === "waiting" ? `A new device joined: ${device.name}. It's waiting for you.` : `${device.name} rejoined.`, ieee); this.mqtt.event("device_joined", {ieee, name: device.name})}
     this.changed();
   }
   onInterview(ieee: string, status: string) {
@@ -182,6 +182,8 @@ export class App extends EventEmitter {
     // didn't finish joining: that's what's wrong with it, whatever else
     const report = this.joinWatch.reports.get(device.ieee);
     if (report && (report.outcome === "failed" || report.outcome === "stuck" || report.outcome === "left") && result.status !== "waiting") {const verdict = diagnose(report); result.status = "warn"; result.reason = `Didn't finish joining: ${verdict?.headline ?? "stopped answering"}.`; result.fix = "join"}
+    // never said what it is (joined half-way, here or before the move): the fix is to start it again
+    else if (!device.model && device.status === "accepted" && result.status !== "bad") {result.status = "warn"; result.reason = "Never finished joining: it hasn't said what it is."; result.fix = "start-again"}
     return result;
   }
   stickIeee() {const links = this.store.linksAt().links, children = new Set(links.map(link => link.child)); return links.find(link => !children.has(link.parent))?.parent ?? "stick"}
@@ -283,7 +285,9 @@ export class App extends EventEmitter {
   async removeDevice(ieee: string, reject = false) {
     const device = this.need(ieee);
     this.backup("before-remove");
-    if (this.radio && this.radioStatus.up) {try {await this.radio.remove(ieee)} catch (error) {this.log("warn", `${device.name} didn't answer the remove request, so it was only forgotten here. It may try to come back.`, ieee, String(error))}}
+    let answered = true;
+    if (this.radio && this.radioStatus.up) {try {answered = await this.radio.remove(ieee)} catch (error) {answered = false}}
+    if (!answered) {this.unreset.add(ieee); this.log("warn", `${device.name} didn't answer, so it was forgotten here and in the adapter, but it may still think it's on your network. Reset it before adding it again.`, ieee)}
     this.store.deleteDevice(ieee); this.mqtt.clearRetained(device.topic); this.onlineCache.delete(ieee);
     this.log("info", reject ? `Rejected ${device.name}.` : `Removed ${device.name}.`, ieee);
     this.changed();

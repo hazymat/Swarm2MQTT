@@ -60,6 +60,8 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "accept": return app.accept(args.ieee);
     case "reject": return app.removeDevice(args.ieee, true);
     case "remove": return app.removeDevice(args.ieee);
+    // remove it everywhere, then open joining for it to come back fresh
+    case "startAgain": {const result = await app.removeDevice(args.ieee); await app.join(240); return result}
     case "join": return app.join(args.seconds, args.via);
     case "joinAgain": return app.joinAgain(String(args.ieee));
     case "rescan": return app.scanNow();

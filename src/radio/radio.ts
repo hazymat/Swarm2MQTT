@@ -32,7 +32,7 @@ export abstract class Radio extends EventEmitter<RadioEvents> {
   abstract permitJoin(seconds: number, viaIeee?: string): Promise<void>;
   abstract reinterview(ieee: string): Promise<void>;
   abstract set(ieee: string, values: Record<string, unknown>): Promise<void>;
-  abstract remove(ieee: string): Promise<void>;
+  abstract remove(ieee: string): Promise<boolean>; // true: it answered and left; false: forgotten here and in the adapter only
   abstract scanLinks(progress?: (step: ScanProgress) => void): Promise<Link[]>;
   abstract ping(ieee: string): Promise<void>;
   abstract bind(fromIeee: string, toIeee: string | number, unbind?: boolean): Promise<void>;

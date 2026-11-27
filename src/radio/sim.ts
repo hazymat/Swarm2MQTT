@@ -92,7 +92,7 @@ export class SimRadio extends Radio {
     Object.assign(device.state, values);
     this.emit("state", ieee, Object.assign({}, device.state), device.lqi);
   }
-  async remove(ieee: string) {this.devices = this.devices.filter(device => device.ieee !== ieee); this.emit("left", ieee)}
+  async remove(ieee: string) {const answered = !this.halfJoined.has(ieee); this.devices = this.devices.filter(device => device.ieee !== ieee); this.emit("left", ieee); return answered}
   halfJoined = new Map<string, SimDevice>();
   async ping(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee); if (!device || device.off || this.cutOff(device)) throw new Error("No response")}
   // trying the half-joined valve again works: it's identified this time

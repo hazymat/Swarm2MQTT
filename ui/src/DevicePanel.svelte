@@ -68,8 +68,14 @@
     </div>
   {:else if health.reason}<div class="callout info"><span class="t">{health.reason}</span></div>{/if}
 
-  {#if joinReport && joinReport.outcome !== "ready"}<JoinStatus report={joinReport}/>
-  {:else if !device.model && device.status === "accepted"}<div class="callout"><span class="t">It hasn't said its make and model, so it has no controls yet. Wake it (press its button), then set it up again.</span><button class="pill ghost" onclick={() => act("joinAgain", {ieee: device.ieee}).catch(() => {})}>Set it up again</button></div>{/if}
+  {#if joinReport && joinReport.outcome !== "ready"}<JoinStatus report={joinReport}/>{/if}
+  {#if !device.model && !device.interviewing && joinReport?.outcome !== "joining"}
+    <div class="startagain card">
+      <b>Start it again</b>
+      <span class="muted small">Joined {dayClock(device.added_at)}{device.last_seen ? ` · last heard ${ago(device.last_seen, view.now)}` : device.rssi != null ? "" : " · never heard"}{device.rssi != null ? ` · ${device.rssi} dBm` : ""}</span>
+      <ol><li>Remove it: it's taken off the network and out of the adapter.</li><li>Reset it: usually hold its button for 5 to 10 seconds until it blinks.</li><li>It joins again from scratch, step by step.</li></ol>
+      <div class="acts"><button class="pill primary" onclick={() => {const ieee = device.ieee, name = device.name; view.open = null; toast(`Starting ${name} again`, null, "info", () => act("startAgain", {ieee}).then(() => toast("Now reset it: hold its button until it blinks", null)).catch(() => {}))}}>Remove and add again</button>{#if !joinReport?.verdict}<button class="pill ghost" onclick={() => act("joinAgain", {ieee: device.ieee}).catch(() => {})}>Just ask it again</button>{/if}</div>
+    </div>{/if}
   {#if !device.supported && device.controls.length}<div class="hint"><span class="t">We don't know this exact model, so these controls are our best guess from what it reports. Remove any that are wrong, or add others below.</span></div>{/if}
 
   <div class="grid2">
@@ -192,6 +198,7 @@
   .name :global(.icon){opacity:.5}
   .text.big{font-size:19px}
   .desc{font-size:14px}
+  .startagain{padding:12px 14px;display:flex;flex-direction:column;gap:6px}.startagain ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.startagain .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .v{display:flex;align-items:center;gap:8px}
   .reading{font-size:18px;font-weight:500}

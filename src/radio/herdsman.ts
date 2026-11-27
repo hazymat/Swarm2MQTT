@@ -35,7 +35,7 @@ const START_SECONDS = 90;
 // The library makes an adapter leave whatever network it holds when it isn't the one in our settings, then forms ours. That wipes someone's working network
 // if the settings are wrong (a stale backup, a typo). So leaving is only allowed when the person asked for a new network; otherwise starting stops with the reason.
 let allowLeave = false;
-const {Ezsp} = createRequire(import.meta.url)("zigbee-herdsman/dist/adapter/ember/ezsp/ezsp.js");
+const {Ezsp} = createRequire(import.meta.url)("zigbee-herdsman/dist/adapter/ember/ezsp/ezsp.js"), {Device: LibraryDevice} = createRequire(import.meta.url)("zigbee-herdsman/dist/controller/model/device.js");
 const ezspLeave = Ezsp.prototype.ezspLeaveNetwork;
 Ezsp.prototype.ezspLeaveNetwork = function (...args: unknown[]) {
   if (allowLeave) return ezspLeave.apply(this, args);
@@ -75,7 +75,7 @@ export class HerdsmanRadio extends Radio {
     });
     this.controller = controller; current = this;
     controller.on("adapterDisconnected", () => this.emit("status", {up: false, reason: "Lost the Zigbee adapter."}));
-    controller.on("permitJoinChanged", data => this.emit("permitJoin", data.permitted ? data.time ?? 1 : 0));
+    controller.on("permitJoinChanged", data => {this.joinOpen = !!data.permitted; this.emit("permitJoin", data.permitted ? data.time ?? 1 : 0)});
     controller.on("deviceJoined", data => this.emit("joined", data.device.ieeeAddr));
     controller.on("deviceLeave", data => this.emit("left", data.ieeeAddr));
     controller.on("lastSeenChanged", data => this.emit("heard", data.device.ieeeAddr));
@@ -116,10 +116,11 @@ export class HerdsmanRadio extends Radio {
   }
   // A device on our network that the device list doesn't know (lost from Zigbee2MQTT's list, or the list was replaced) is ignored by the library for ever.
   // Whenever one is heard of, it's set up as if it had just joined, and waits in "Waiting for you".
-  adopting = new Set<string>();
+  adopting = new Set<string>(); joinOpen = false;
   adopt(ieee: string, nwk: number) {
     const controller: any = this.controller;
-    if (!controller || !ieee || this.adopting.has(ieee) || controller.getDeviceByIeeeAddr(ieee) || /^0x(0{16}|f{16})$/i.test(ieee) || typeof nwk !== "number" || nwk >= 0xfff8) return;
+    // one you removed only comes back while joining is open (you're adding it again)
+    if (!controller || !ieee || this.adopting.has(ieee) || controller.getDeviceByIeeeAddr(ieee) || (LibraryDevice.byIeeeAddr(ieee, true)?.isDeleted && !this.joinOpen) || /^0x(0{16}|f{16})$/i.test(ieee) || typeof nwk !== "number" || nwk >= 0xfff8) return;
     this.adopting.add(ieee); this.emit("stray", ieee);
     Promise.resolve().then(() => controller.onDeviceJoined({ieeeAddr: ieee, networkAddress: nwk})).catch(() => {}).finally(() => this.adopting.delete(ieee));
   }
@@ -165,7 +166,8 @@ export class HerdsmanRadio extends Radio {
     }
     this.states.set(ieee, state);
   }
-  async remove(ieee: string) {const device = this.device(ieee); await device.removeFromNetwork(); this.definitions.delete(ieee); this.states.delete(ieee)}
+  // asks it to leave; one that doesn't answer is forgotten anyway (here and in the adapter's list), so the slate is clean either way
+  async remove(ieee: string) {const device = this.device(ieee); let answered = true; try {await device.removeFromNetwork()} catch {answered = false; device.removeFromDatabase()} this.definitions.delete(ieee); this.states.delete(ieee); return answered}
   // through one router only (a device that can't be moved, near that router), or anywhere
   async permitJoin(seconds: number, viaIeee?: string) {await this.controller!.permitJoin(seconds, viaIeee ? this.device(viaIeee) : undefined)}
   async reinterview(ieee: string) {
