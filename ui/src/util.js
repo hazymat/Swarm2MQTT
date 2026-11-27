@@ -26,8 +26,8 @@ export function shapeOf(device) {
   if (device.kind === "router") return "plug";
   return "device";
 }
-export const STATUS_COLOUR = {ok: "var(--green)", warn: "var(--amber)", bad: "var(--red)", waiting: "var(--accent)"};
-export const STATUS_WORD = {ok: "Fine", warn: "Needs a look", bad: "Not working", waiting: "Waiting for you"};
+export const STATUS_COLOUR = {ok: "var(--green)", warn: "var(--amber)", bad: "var(--red)", waiting: "var(--accent)", new: "var(--blue)"};
+export const STATUS_WORD = {ok: "Fine", warn: "Needs a look", bad: "Not working", waiting: "Waiting for you", new: "Checking in"};
 export function ago(ts, now = Date.now()) {
   if (!ts) return "never";
   const seconds = Math.max(0, Math.round((now - ts) / 1000));

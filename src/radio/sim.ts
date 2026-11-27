@@ -1,5 +1,5 @@
 // Fake adapter and devices, so the app runs (and can be shown) without any Zigbee hardware
-import {Radio, type Control, type Link, type RadioDevice} from "./radio.js";
+import {Radio, type Control, type Link, type RadioDevice, type ScanProgress} from "./radio.js";
 
 const onOff: Control = {property: "state", label: "On/off", type: "binary", writable: true, readable: true, on: "ON", off: "OFF"};
 const brightness: Control = {property: "brightness", label: "Brightness", type: "numeric", writable: true, readable: true, min: 0, max: 254};
@@ -65,10 +65,23 @@ export class SimRadio extends Radio {
       const device = make(ieee, "router", "ZBMINIL2", "SONOFF", "Zigbee smart switch (no neutral)", [onOff], this.stick, {state: "OFF"}, 120, 160);
       device.interviewing = true;
       this.devices.push(device);
-      this.emit("joined", ieee);
-      this.emit("interview", ieee, "started");
-      setTimeout(() => {device.interviewing = false; this.emit("interview", ieee, "successful"); this.timers.push(setInterval(() => this.report(device), device.every * 1000 / 60)); this.report(device)}, 4000);
+      this.emit("joined", ieee); this.emit("joinStep", ieee, "joined"); this.emit("interview", ieee, "started");
+      const steps = ["secured", "described", "endpoints", "identified"] as const;
+      steps.forEach((step, index) => setTimeout(() => {this.emit("signal", ieee, -61, 180); this.emit("delivery", ieee, true); if (step === "secured") this.emit("joinInfo", ieee, {router: true}); this.emit("joinStep", ieee, step)}, 600 * (index + 1)));
+      setTimeout(() => {device.interviewing = false; this.emit("joinStep", ieee, "ready"); this.emit("interview", ieee, "successful"); this.timers.push(setInterval(() => this.report(device), device.every * 1000 / 60)); this.report(device)}, 4000);
     }, 3000);
+    // and a radiator valve that can't be brought closer: weak signal, so it half-joins (no model yet) until tried again
+    setTimeout(() => {
+      if (!this.joinEnd) return;
+      const ieee = "0x2c1165fffe" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0"), via = this.devices.find(candidate => candidate.kind === "router")?.ieee ?? this.stick;
+      const device = make(ieee, "battery", "", "", "", [], via, {}, 3600, 22); device.interviewing = true; device.supported = false; device.model = undefined; device.vendor = undefined;
+      this.devices.push(device); this.halfJoined.set(ieee, device);
+      this.emit("joined", ieee); this.emit("joinInfo", ieee, {parent: via === this.stick ? undefined : via}); this.emit("joinStep", ieee, "joined"); this.emit("interview", ieee, "started");
+      setTimeout(() => {this.emit("signal", ieee, -88, 40); this.emit("joinInfo", ieee, {sleepy: true}); this.emit("joinStep", ieee, "secured")}, 900);
+      setTimeout(() => {this.emit("signal", ieee, -90, 34); this.emit("joinStep", ieee, "described")}, 1800);
+      setTimeout(() => {this.emit("signal", ieee, -89, 36); this.emit("joinStep", ieee, "endpoints")}, 2700);
+      setTimeout(() => {this.emit("delivery", ieee, false); this.emit("delivery", ieee, false); this.emit("joinFailed", ieee, "Delivery failed"); device.interviewing = false; this.emit("interview", ieee, "failed")}, 5200);
+    }, 5000);
   }
   async set(ieee: string, values: Record<string, unknown>) {
     const device = this.devices.find(candidate => candidate.ieee === ieee);
@@ -80,7 +93,19 @@ export class SimRadio extends Radio {
     this.emit("state", ieee, Object.assign({}, device.state), device.lqi);
   }
   async remove(ieee: string) {this.devices = this.devices.filter(device => device.ieee !== ieee); this.emit("left", ieee)}
-  async scanLinks(): Promise<Link[]> {
+  halfJoined = new Map<string, SimDevice>();
+  async ping(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee); if (!device || device.off || this.cutOff(device)) throw new Error("No response")}
+  // trying the half-joined valve again works: it's identified this time
+  async reinterview(ieee: string) {
+    const device = this.halfJoined.get(ieee); if (!device) return; this.emit("interview", ieee, "started");
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    Object.assign(device, {model: "TRVZB", vendor: "SONOFF", description: "Zigbee thermostatic radiator valve", supported: true, controls: [{property: "local_temperature", label: "Temperature", type: "numeric", readable: true, writable: false, unit: "°C"}], interviewing: false, state: {local_temperature: 19.5, battery: 100}});
+    this.halfJoined.delete(ieee); this.emit("signal", ieee, -79, 96); this.emit("joinStep", ieee, "identified"); this.emit("joinStep", ieee, "ready"); this.emit("interview", ieee, "successful");
+  }
+  async scanLinks(progress: (step: ScanProgress) => void = () => {}): Promise<Link[]> {
+    const routers = [this.stick].concat(this.devices.filter(device => device.kind === "router").map(device => device.ieee)), state: ScanProgress = {done: 0, total: routers.length, answered: [], silent: []};
+    for (const ieee of routers) {progress(Object.assign(state, {asking: ieee})); await new Promise(resolve => setTimeout(resolve, 150)); const device = this.devices.find(candidate => candidate.ieee === ieee); if (device && (device.off || this.cutOff(device))) state.silent.push(ieee); else state.answered.push({ieee, hears: this.devices.filter(candidate => candidate.parent === ieee).length}); state.done++}
+    progress(Object.assign(state, {asking: undefined}));
     // battery devices sometimes switch router, to show route changes
     for (const device of this.devices) if (device.kind === "battery" && Math.random() < .25) {const routers = this.devices.filter(candidate => candidate.kind === "router" && !candidate.off); if (routers.length) device.parent = routers[Math.floor(Math.random() * routers.length)].ieee}
     return this.devices.filter(device => !device.off && !this.cutOff(device)).map(device => ({child: device.ieee, parent: device.parent, lqi: Math.max(20, Math.min(255, device.lqi + Math.round((Math.random() - .5) * 40)))}));

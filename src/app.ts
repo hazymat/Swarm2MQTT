@@ -6,6 +6,7 @@ import {Store, type DeviceRow, type Format, type GroupRow} from "./store.js";
 import {Radio, type Control, type RadioDevice, type RadioStatus} from "./radio/radio.js";
 import {SimRadio} from "./radio/sim.js";
 import {HerdsmanRadio, adapterLog, type StickConfig} from "./radio/herdsman.js";
+import {JoinWatch, diagnose} from "./joinwatch.js";
 import {MqttBridge, DEFAULT_MQTT, type MqttSettings} from "./mqtt.js";
 import {addGap, health, type Health} from "./health.js";
 import {translate} from "./errors.js";
@@ -26,11 +27,16 @@ export class App extends EventEmitter {
   radioStatus: RadioStatus = {up: false, reason: "Starting…"};
   mqtt: MqttBridge;
   joinEndsAt = 0;
-  joinFound: string[] = [];
+  joinFound: string[] = []; joinVia?: string;
   rejoinRows = new Map<string, DeviceRow>();
+  scan: {running: boolean; startedAt?: number; finishedAt?: number; asking?: string; done: number; total: number; answered: {ieee: string; hears: number}[]; silent: string[]} = {running: false, done: 0, total: 0, answered: [], silent: []};
+  joinWatch = new JoinWatch(() => this.changed());
+  networkUpAt = 0; // devices not heard yet get their check-in time from here
   retryMs = 2000; retryDelay = 2000; attempts = 0; lastRadioError?: string;
   retryTimer?: NodeJS.Timeout;
   scanTimer?: NodeJS.Timeout;
+  strays = new Set<string>(); // found on the network but missing from the device list
+  scanSoon = false;
   onlineCache = new Map<string, boolean>();
   firmwareProgress = new Map<string, {percent: number; secondsLeft?: number}>();
   startedAt = Date.now();
@@ -76,11 +82,17 @@ export class App extends EventEmitter {
     radio.on("status", status => {this.setRadioStatus(status); if (!status.up && radio === this.radio) this.retryRadio()});
     radio.on("state", (ieee, values, lqi) => this.onState(ieee, values, lqi));
     radio.on("heard", ieee => this.onHeard(ieee));
+    radio.on("joinStep", (ieee, step) => this.joinWatch.step(ieee, step));
+    radio.on("joinFailed", (ieee, error) => this.joinWatch.fail(ieee, this.joinWatch.reports.get(ieee)?.failing?.step ?? "identified", error ?? "no answer"));
+    radio.on("signal", (ieee, rssi, lqi) => this.joinWatch.heard(ieee, rssi, lqi));
+    radio.on("delivery", (ieee, ok) => this.joinWatch.delivered(ieee, ok));
+    radio.on("joinInfo", (ieee, info) => {if (this.joinWatch.watching(ieee) || this.joinEndsAt > Date.now()) this.joinWatch.set(ieee, info)});
+    radio.on("stray", ieee => {this.strays.add(ieee); this.scanSoon = true});
     radio.on("joined", ieee => this.onJoined(ieee));
     radio.on("interview", (ieee, status) => this.onInterview(ieee, status));
     radio.on("left", ieee => {const device = this.store.device(ieee); if (device) this.log("warn", `${device.name} left the network.`, ieee)});
     radio.on("permitJoin", seconds => {this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()});
-    radio.start().then(() => {if (this.stick?.formNew) this.store.put("stick", Object.assign({}, this.stick, {formNew: undefined})); /* formed: from now on it never leaves its network by itself */ this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(5000)}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
+    radio.start().then(() => {if (this.stick?.formNew) this.store.put("stick", Object.assign({}, this.stick, {formNew: undefined})); /* formed: from now on it never leaves its network by itself */ this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(5000); this.pingRouters()}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
   }
   retryRadio() {
     clearTimeout(this.retryTimer); clearTimeout(this.scanTimer);
@@ -89,7 +101,7 @@ export class App extends EventEmitter {
     this.retryMs = Math.min(this.retryMs * 2, 60e3);
   }
   async restartRadio() {clearTimeout(this.retryTimer); this.attempts = 0; const radio = this.radio; this.radio = undefined; radio?.removeAllListeners(); await radio?.stop().catch(() => {}); this.retryMs = 2000; this.startRadio()}
-  setRadioStatus(status: RadioStatus) {const wasUp = this.radioStatus.up; this.radioStatus = status; if (wasUp !== status.up) {this.log(status.up ? "info" : "bad", status.up ? "Zigbee adapter connected." : status.reason ?? "Zigbee adapter lost."); this.mqtt.event(status.up ? "adapter_up" : "adapter_down", {text: status.reason})} this.changed()}
+  setRadioStatus(status: RadioStatus) {const wasUp = this.radioStatus.up; if (status.up && !wasUp) this.networkUpAt = Date.now(); this.radioStatus = status; if (wasUp !== status.up) {this.log(status.up ? "info" : "bad", status.up ? "Zigbee adapter connected." : status.reason ?? "Zigbee adapter lost."); this.mqtt.event(status.up ? "adapter_up" : "adapter_down", {text: status.reason})} this.changed()}
 
   // Bring the store in line with what the radio knows about
   syncDevices() {for (const radioDevice of this.radio?.list() ?? []) this.upsert(radioDevice, false); this.changed()}
@@ -111,7 +123,7 @@ export class App extends EventEmitter {
   uniqueName(base: string, except?: string) {const names = new Set(this.store.devices().filter(device => device.ieee !== except).map(device => device.name)); let name = base, count = 2; while (names.has(name)) name = `${base} ${count++}`; return name}
   uniqueTopic(base: string, except?: string) {const topics = new Set(this.store.devices().filter(device => device.ieee !== except).map(device => device.topic).concat(this.store.groups().map(group => group.topic))); let topic = base, count = 2; while (topics.has(topic) || topic === "bridge") topic = `${base}_${count++}`; return topic}
 
-  onHeard(ieee: string) {const device = this.store.device(ieee); if (!device) return; addGap(device, Date.now()); this.store.saveDevice(device); this.availabilityChanged(device)}
+  onHeard(ieee: string) {this.retryJoin(ieee); const device = this.store.device(ieee); if (!device) return; addGap(device, Date.now()); this.store.saveDevice(device); this.availabilityChanged(device)}
   onState(ieee: string, values: Record<string, unknown>, lqi?: number) {
     const device = this.store.device(ieee);
     if (!device) return;
@@ -127,18 +139,29 @@ export class App extends EventEmitter {
   }
   onJoined(ieee: string) {
     if (!this.joinFound.includes(ieee)) this.joinFound.push(ieee);
+    this.joinWatch.step(ieee, "joined");
     const radioDevice = this.radio?.list().find(candidate => candidate.ieee === ieee);
     const device = radioDevice ? this.upsert(radioDevice, true) : undefined;
-    if (device) {this.log("info", device.status === "waiting" ? `A new device joined: ${device.name}. It's waiting for you.` : `${device.name} rejoined.`, ieee); this.mqtt.event("device_joined", {ieee, name: device.name})}
+    const stray = this.strays.delete(ieee);
+    if (device) {this.log("info", stray ? `Found ${device.name} on your network. It wasn't in the device list, so it's waiting for you.` : device.status === "waiting" ? `A new device joined: ${device.name}. It's waiting for you.` : `${device.name} rejoined.`, ieee); this.mqtt.event("device_joined", {ieee, name: device.name})}
     this.changed();
   }
   onInterview(ieee: string, status: string) {
     const radioDevice = this.radio?.list().find(candidate => candidate.ieee === ieee);
     if (radioDevice) this.upsert(radioDevice, true);
-    if (status === "failed") {const device = this.store.device(ieee); this.log("warn", translate("Interview failed").text, ieee)}
+    if (status === "failed") {this.joinWatch.failed(ieee); const verdict = this.joinWatch.reports.get(ieee)?.verdict; this.log("warn", verdict ? `${this.store.device(ieee)?.name ?? ieee}: ${verdict.headline}. ${verdict.why}` : translate("Interview failed").text, ieee)}
+    if (status === "successful") {this.joinWatch.step(ieee, "ready"); if (radioDevice && !radioDevice.supported) this.joinWatch.set(ieee, {unknownModel: [radioDevice.vendor, radioDevice.model].filter(Boolean).join(" ") || "an unknown model"})}
     this.changed();
   }
-  checkAvailability() {for (const device of this.store.devices()) this.availabilityChanged(device)}
+  // a device that didn't finish joining gets another go each time it's heard (a sleepy one is awake right then), at most once a minute, 10 times
+  retryJoin(ieee: string) {
+    const report = this.joinWatch.reports.get(ieee);
+    if (!report || !this.radio || (report.outcome !== "failed" && report.outcome !== "stuck") || report.retries >= 10 || Date.now() - (report.lastRetry ?? 0) < 60e3) return;
+    report.retries++; report.lastRetry = Date.now(); report.outcome = "joining"; this.changed();
+    this.radio.reinterview(ieee).catch(() => {});
+  }
+  async joinAgain(ieee: string) {if (!this.radio) throw new Error("The adapter isn't connected."); const report = this.joinWatch.report(ieee); report.outcome = "joining"; report.failing = undefined; report.retries++; report.lastRetry = Date.now(); this.changed(); await this.radio.reinterview(ieee)}
+  checkAvailability() {this.joinWatch.sweep(); for (const device of this.store.devices()) this.availabilityChanged(device)}
   availabilityChanged(device: DeviceRow) {
     const online = this.healthOf(device).online, before = this.onlineCache.get(device.ieee);
     if (before === online) return;
@@ -154,19 +177,33 @@ export class App extends EventEmitter {
     const all = devices ?? new Map(this.store.devices().map(row => [row.ieee, row])), now = Date.now(), prefs = this.prefs;
     const stickIeee = this.stickIeee();
     const isOnline = (ieee: string) => ieee === stickIeee ? this.radioStatus.up : (() => {const row = all.get(ieee); return !!row && health(row, now, () => undefined, () => true, () => "", [], prefs.batteryLeadDays, prefs.batteryPercent).online})();
-    return health(device, now, ieee => parents.get(ieee), isOnline, ieee => ieee === stickIeee ? "the adapter" : all.get(ieee)?.name ?? ieee, typeof device.state.battery === "number" ? this.store.history(device.ieee, "battery") : [], prefs.batteryLeadDays, prefs.batteryPercent);
+    const result = health(device, now, ieee => parents.get(ieee), isOnline, ieee => ieee === stickIeee ? "the adapter" : all.get(ieee)?.name ?? ieee, typeof device.state.battery === "number" ? this.store.history(device.ieee, "battery") : [], prefs.batteryLeadDays, prefs.batteryPercent, this.networkUpAt);
+    // didn't finish joining: that's what's wrong with it, whatever else
+    const report = this.joinWatch.reports.get(device.ieee);
+    if (report && (report.outcome === "failed" || report.outcome === "stuck" || report.outcome === "left") && result.status !== "waiting") {const verdict = diagnose(report); result.status = "warn"; result.reason = `Didn't finish joining: ${verdict?.headline ?? "stopped answering"}.`; result.fix = "join"}
+    return result;
   }
   stickIeee() {const links = this.store.linksAt().links, children = new Set(links.map(link => link.child)); return links.find(link => !children.has(link.parent))?.parent ?? "stick"}
 
-  scheduleScan(delay = LINK_SCAN_MS) {clearTimeout(this.scanTimer); this.scanTimer = setTimeout(() => this.scanNow().finally(() => this.scheduleScan()), delay)}
+  // just started: ask each plugged-in device that hasn't been heard lately to answer, so it shows as working straight away (battery ones check in when they wake)
+  async pingRouters() {
+    for (const device of this.store.devices().filter(row => row.kind === "router" && row.status === "accepted" && (!row.last_seen || Date.now() - row.last_seen > 60e3))) {
+      if (!this.radio || !this.radioStatus.up) return;
+      try {await this.radio.ping(device.ieee); this.onHeard(device.ieee); this.changed()} catch {}
+    }
+  }
+  scheduleScan(delay = LINK_SCAN_MS) {clearTimeout(this.scanTimer); this.scanTimer = setTimeout(() => this.scanNow().finally(() => {const soon = this.scanSoon; this.scanSoon = false; this.scheduleScan(soon ? 120e3 : LINK_SCAN_MS)}), delay)} // devices found during a check get their own links drawn 2 minutes later
   async scanNow() {
-    if (!this.radio || !this.radioStatus.up) return;
+    if (!this.radio || !this.radioStatus.up || this.scan.running) return;
+    this.scan = {running: true, startedAt: Date.now(), done: 0, total: 0, answered: [], silent: [], finishedAt: this.scan.finishedAt}; this.changed();
     try {
-      const links = await this.radio.scanLinks(), before = this.parents();
-      this.store.saveLinks(links);
+      const links = await this.radio.scanLinks(step => {Object.assign(this.scan, step); this.changed()}), before = this.parents();
+      this.store.saveLinks(links); this.scan.finishedAt = Date.now(); this.store.put("lastScan", this.scan.finishedAt);
+      const silent = this.scan.silent.map(ieee => this.store.device(ieee)?.name ?? "The adapter"); if (silent.length) this.log("warn", `${silent.join(", ")} didn't answer when asked who it hears. ${silent.length === 1 ? "It" : "They"} may be off or out of reach.`);
       for (const link of links) {const old = before.get(link.child); if (old && old !== link.parent) {const name = (ieee: string) => this.store.device(ieee)?.name ?? "the adapter"; this.log("info", `${name(link.child)} now talks through ${name(link.parent)} instead of ${name(old)}.`, link.child)}}
       this.changed();
     } catch (error) {this.log("warn", "Couldn't finish checking who talks through whom. Will try again later.", undefined, String(error))}
+    finally {this.scan.running = false; this.scan.asking = undefined; this.changed()}
   }
 
   // MQTT commands in: <topic>/set (JSON) or <topic>/<field>/set (single value)
@@ -251,7 +288,7 @@ export class App extends EventEmitter {
     this.changed();
     return this.pushUndo(reject ? `Rejected ${device.name}` : `Removed ${device.name}`, {op: "remove", ieee}, {op: "rejoin", row: device});
   }
-  async join(seconds: number) {await this.requireRadio().permitJoin(seconds); this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()}
+  async join(seconds: number, via?: string) {await this.requireRadio().permitJoin(seconds, via || undefined); this.joinVia = seconds ? via : undefined; this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()}
 
   // groups and scenes
   nextId(ids: number[]) {let id = 1; while (ids.includes(id)) id++; return id}
@@ -399,9 +436,11 @@ export class App extends EventEmitter {
     const devices = this.store.devices(), parents = this.parents(), all = new Map(devices.map(device => [device.ieee, device])), latest = this.store.linksAt();
     return {
       version: VERSION, whatsNew: this.whatsNew, update: this.update, sim: this.sim, radio: this.radioStatus.up || this.sim ? this.radioStatus : Object.assign({}, this.radioStatus, {log: adapterLog.slice(-40)}), mqtt: {connected: this.mqtt.connected, error: this.mqtt.error, settings: Object.assign({}, this.mqttSettings, {password: this.mqttSettings.password ? "••••" : ""})}, prefs: this.prefs, stickSet: !!this.stick || this.sim, stick: this.stick ? {path: this.stick.path, adapter: this.stick.adapter} : null,
-      join: {endsAt: this.joinEndsAt, found: this.joinFound},
+      join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia},
+      // how each recent join went, with the verdict in plain words (names filled in)
+      joinReports: Array.from(this.joinWatch.reports.values()).map(report => Object.assign({}, report, {verdict: diagnose(report, ieee => ieee ? this.store.device(ieee)?.name ?? ieee : "the adapter")})),
       devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
-      stickIeee: this.stickIeee(), links: latest, groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),
+      stickIeee: this.stickIeee(), links: latest, scan: Object.assign({}, this.scan, {finishedAt: this.scan.finishedAt ?? this.store.get<number | undefined>("lastScan", undefined)}), groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),
       undo: this.store.undoList(30), changes: this.meshChanges(), backups: this.backups().map(entry => ({name: entry.name, ts: entry.ts, reason: entry.reason})),
     };
   }

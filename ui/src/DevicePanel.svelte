@@ -6,9 +6,10 @@
   import Icon from "./Icon.svelte";
   import Pic from "./Pic.svelte";
   import Spark from "./Spark.svelte";
+  import JoinStatus from "./JoinStatus.svelte";
   let {device} = $props();
   let snap = $derived(live.snap);
-  let health = $derived(device.health);
+  let health = $derived(device.health), joinReport = $derived(live.snap.joinReports?.find(report => report.ieee === device.ieee));
   let hidden = $derived(new Set(device.hidden_controls));
   let shown = $derived(device.controls.filter(control => !hidden.has(control.property) && control.property !== "linkquality"));
   let readings = $derived(shown.filter(control => !control.setting));
@@ -67,6 +68,8 @@
     </div>
   {:else if health.reason}<div class="callout info"><span class="t">{health.reason}</span></div>{/if}
 
+  {#if joinReport && joinReport.outcome !== "ready"}<JoinStatus report={joinReport}/>
+  {:else if !device.model && device.status === "accepted"}<div class="callout"><span class="t">It hasn't said its make and model, so it has no controls yet. Wake it (press its button), then set it up again.</span><button class="pill ghost" onclick={() => act("joinAgain", {ieee: device.ieee}).catch(() => {})}>Set it up again</button></div>{/if}
   {#if !device.supported && device.controls.length}<div class="hint"><span class="t">We don't know this exact model, so these controls are our best guess from what it reports. Remove any that are wrong, or add others below.</span></div>{/if}
 
   <div class="grid2">

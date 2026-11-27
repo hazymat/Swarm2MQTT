@@ -2,22 +2,32 @@
   import {live, act} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
   import Pic from "./Pic.svelte";
+  import JoinStatus from "./JoinStatus.svelte";
   let snap = $derived(live.snap);
   let found = $derived(snap.join.found.map(ieee => snap.devices.find(device => device.ieee === ieee)).filter(Boolean));
+  let reportOf = ieee => snap.joinReports?.find(report => report.ieee === ieee);
+  // a device that can't be brought closer (a valve on a radiator) joins through the router nearest it instead
+  let routers = $derived(snap.devices.filter(device => device.kind === "router" && device.status === "accepted" && device.health.online));
+  function joinNear(via) {act("join", {seconds: Math.max(30, Math.round((snap.join.endsAt - Date.now()) / 1000)), via})}
 </script>
 <div class="card joinbox">
   <h4><svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="8" width="12" height="9" rx="2" fill="var(--amber)"/><path d="M6 8V5a3 3 0 0 1 6 0" fill="none" stroke="var(--amber)" stroke-width="2"/></svg>Open for new devices</h4>
   {#if live.rejoin}<div class="callout info"><span class="t">Waiting for <b>{live.rejoin.name}</b> to come back. Put it in pairing mode and it gets its old name and settings.</span></div>{/if}
   <p>Put your device in pairing mode now. Usually: hold its button for 5 seconds until it blinks.</p>
+  {#if routers.length}<label class="near"><span class="muted">Join near</span><select class="text" value={snap.join.via ?? ""} onchange={event => joinNear(event.currentTarget.value)}><option value="">Anywhere</option>{#each routers as router (router.ieee)}<option value={router.ieee}>{router.name}</option>{/each}</select></label>
+  <p class="fieldhint">For a device that can't be moved closer, pick the plugged-in device nearest it: only that one lets it in.</p>{/if}
   <div class="warn"><span>⚠</span><span>While this is on, any device nearby can join and is handed your network key, including a neighbour's. It turns itself off after 4 minutes; stop it once your device is in.</span></div>
   <div class="found">
     {#each found as device (device.ieee)}
+      {@const report = reportOf(device.ieee)}
       <div class="kv">
         <span class="who"><Pic {device} size={32}/>{device.name}</span>
         {#if device.status === "waiting"}<span class="acts"><button class="pill" style="background:var(--mint)" onclick={() => act("accept", {ieee: device.ieee})}>Accept</button><button class="pill ghost" onclick={() => view.open = device.ieee}>Look first</button></span>
+        {:else if report && report.outcome !== "ready" && report.outcome !== "joining"}<span style="color:var(--red)">Didn't finish</span>
         {:else if !device.controls.length}<span class="muted">Getting to know it…</span>
         {:else}<span style="color:var(--green)">Ready</span>{/if}
       </div>
+      {#if report}<JoinStatus {report}/>{/if}
     {:else}<div class="muted listening">Listening…</div>{/each}
   </div>
   <button class="pill ghost stop" onclick={() => act("join", {seconds: 0})}>Stop<kbd>Esc</kbd></button>
@@ -34,4 +44,5 @@
   .listening{padding:8px 0;animation:fade 1.6s ease-in-out infinite}
   @keyframes fade{50%{opacity:.4}}
   .stop{align-self:flex-start}
+  .near{display:flex;align-items:center;gap:10px}.near select{flex:1;min-width:0}
 </style>

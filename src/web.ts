@@ -60,7 +60,8 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "accept": return app.accept(args.ieee);
     case "reject": return app.removeDevice(args.ieee, true);
     case "remove": return app.removeDevice(args.ieee);
-    case "join": return app.join(args.seconds);
+    case "join": return app.join(args.seconds, args.via);
+    case "joinAgain": return app.joinAgain(String(args.ieee));
     case "rescan": return app.scanNow();
     case "groupCreate": return app.createGroup(args.name, args.members ?? []);
     case "groupMember": return app.groupMember(args.id, args.ieee, !!args.remove);

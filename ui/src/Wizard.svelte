@@ -27,7 +27,7 @@
   function gotNetwork(result) {network = result; files = result.files; chosen = result.devices.map(device => device.ieee); if (!path && result.adapterPath) path = result.adapterPath; if (result.adapterType) adapter = result.adapterType}
   // asking can take a while (Zigbee2MQTT zips its whole data folder): count the seconds, and keep any failure on the page
   let askError = $state(""), askStarted = $state(0), logsOpen = $state(false);
-  const logCommand = $derived(found?.logRoot ? `find '${found.logRoot}' -mindepth 1 -maxdepth 1 -type d -mtime +1 -exec rm -rf {} +` : "");
+  const logCommand = $derived(found?.logRoot ? `for dir in '${found.logRoot}' '${found.logRoot}-old'; do [ -d "$dir" ] && find "$dir" -mindepth 1 -maxdepth 1 -mtime +1 -exec rm -rf {} +; done` : "");
   async function askZ2m() {busy = true; askError = ""; askStarted = Date.now(); try {gotNetwork(await call("z2mFetch", {baseTopic}))} catch (error) {askError = error.message} busy = false; askStarted = 0}
   async function pickFiles(fileList) {
     if (!fileList?.length) return; busy = true;
@@ -116,7 +116,7 @@
                 <div class="logs">
                   <b>Clear Zigbee2MQTT's old logs</b>
                   <ol>
-                    <li>On the Zigbee2MQTT machine, run this{found.logRoot.startsWith("/app/") ? " inside its Docker container" : ""}. It deletes its log folders older than a day, which Zigbee2MQTT is meant to do itself.
+                    <li>On the Zigbee2MQTT machine, run this{found.logRoot.startsWith("/app/") ? " inside its Docker container" : ""}. It deletes its log folders older than a day (and the ones it moved aside), which Zigbee2MQTT is meant to do itself. If it says permission denied, type sudo -s first, then run it again.
                       <div class="cmd"><code class="selectable">{logCommand}</code><button class="pill ghost small" onclick={() => navigator.clipboard?.writeText(logCommand).then(() => toast("Copied", null))}>Copy</button></div>
                     </li>
                     <li>Then get your network below. It can take a few minutes if there were many.</li>

@@ -65,7 +65,8 @@ export function readZ2m(files: Z2mFiles): Z2mImport {
 // Write herdsman's own files into our data folder, so the adapter carries on with the same network
 export function writeZ2mFiles(files: Z2mFiles, dataDir: string) {
   writeFileSync(`${dataDir}/herdsman.db`, files["database.db"]);
-  if (files["coordinator_backup.json"]) writeFileSync(`${dataDir}/coordinator_backup.json`, files["coordinator_backup.json"]);
+  // Devices drop frames whose counter isn't above the last one they saw. The backup can be minutes older than Zigbee2MQTT's last frame, so start well past it (as ZHA does)
+  if (files["coordinator_backup.json"]) {const backup = JSON.parse(files["coordinator_backup.json"]); if (typeof backup.network_key?.frame_counter === "number") backup.network_key.frame_counter += 5000; writeFileSync(`${dataDir}/coordinator_backup.json`, JSON.stringify(backup, null, 2))}
 }
 // Ask a running Zigbee2MQTT for its backup over MQTT (what its web page's backup button does): the data folder as a zip.
 // Read only: Zigbee2MQTT keeps running and keeps the adapter.

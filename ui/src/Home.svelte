@@ -11,7 +11,13 @@
 
   let snap = $derived(live.snap), notRunning = $derived(!snap.sim && !snap.radio.up);
   let devices = $derived(snap.devices);
-  let order = {bad: 0, warn: 1, waiting: 2, ok: 3};
+  let checkedAt = $derived(snap.scan?.finishedAt || snap.links.ts);
+  // the map check as it goes: the adapter, then each plugged-in device
+  let scanRows = $derived.by(() => {
+    const scan = snap.scan, rows = [{ieee: snap.stickIeee, name: "Adapter"}].concat(devices.filter(device => device.kind === "router" && device.status === "accepted").map(device => ({ieee: device.ieee, name: device.name})));
+    return rows.map(row => {const answered = scan.answered.find(entry => entry.ieee === row.ieee); return Object.assign({}, row, {state: answered ? "ok" : scan.silent.includes(row.ieee) ? "silent" : scan.running && scan.asking === row.ieee ? "asking" : "waiting", hears: answered?.hears})});
+  });
+  let order = {bad: 0, warn: 1, waiting: 2, new: 3, ok: 4};
   let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => order[first.health.status] - order[second.health.status] || first.name.localeCompare(second.name)));
   let waiting = $derived(devices.filter(device => device.status === "waiting"));
   let joining = $derived(snap.join.endsAt > view.now);
@@ -48,17 +54,27 @@
   {#if notRunning}<div class="runslot" class:hide={tab !== "map"}><GettingRunning/></div>{:else}
   <section class="card mapcard" class:hide={tab !== "map"}>
     <div class="maphead">
-      <span class="when">{#if view.at}<b>{dayClock(view.at)}</b>{:else}Now{/if}</span>
-      <span class="hop">
+      <span class="when">{#if view.at}<b>{dayClock(view.at)}</b>{:else}<b>Network map</b>{/if}</span>
+      {#if changes.length}<span class="hop">
         <button class="iconbtn small" title="Previous change" disabled={atIndex <= 0} onclick={() => hop(-1)}><Icon name="prev" small/></button>
         <button class="iconbtn small" title="Next change" disabled={!view.at} onclick={() => hop(1)}><Icon name="next" small/></button>
-      </span>
+      </span>{/if}
       {#if view.at}<button class="chip" class:on={view.compare} onclick={() => view.compare = !view.compare}>{view.compare ? "Comparing with now" : "Compare with now"}</button><button class="chip" onclick={() => {view.at = null; view.compare = false}}>Back to now<kbd>Esc</kbd></button>{/if}
-      <span class="faint checked">{snap.links.ts ? `Checked ${ago(snap.links.ts, view.now)}` : "Not checked yet"}</span>
-      <button class="chip" disabled={!snap.radio.up} onclick={() => act("rescan").then(() => toast("Map checked", null))}>Check now</button>
+      <span class="faint checked">{snap.scan.running ? `Checking… ${snap.scan.done} of ${snap.scan.total}` : checkedAt ? `Checked ${ago(checkedAt, view.now)}` : "Not checked yet"}</span>
+      <button class="chip" disabled={!snap.radio.up || snap.scan.running} onclick={() => act("rescan").then(() => toast("Map checked", null))}>Check now</button>
     </div>
     <div class="mapwrap">
-      {#if !snap.links.ts && !view.at && devices.length}<div class="mapwait"><span class="spin"></span>Drawing the map: asking each device who it talks through. This takes a minute or two.</div>{:else}
+      {#if !checkedAt && !view.at && devices.length}
+        <div class="mapwait">
+          <b>Drawing the map</b>
+          <span class="muted">Each plugged-in device is asked which devices it can hear. About 5 to 20 seconds each.</span>
+          <ul class="asks">
+            {#each scanRows as row (row.ieee)}<li class={row.state}><span class="mark">{#if row.state === "asking"}<span class="spin"></span>{:else if row.state === "ok"}✓{:else if row.state === "silent"}✕{:else}·{/if}</span><span>{row.name}</span><span class="muted">{row.state === "ok" ? `hears ${row.hears}` : row.state === "silent" ? "didn't answer" : row.state === "asking" ? "asking…" : "waiting"}</span></li>{/each}
+          </ul>
+          {#if !snap.scan.running}<span class="muted">Starts in a moment.</span>{/if}
+        </div>
+      {:else}
+      {#if checkedAt && !view.at && !snap.scan.running && !devices.some(device => device.kind === "router" && device.status === "accepted")}<div class="mapnote"><b>No plugged-in devices known yet</b><span class="muted">So there's no one to ask who talks through whom. Any on your network turn up in Waiting for you as they're heard.</span></div>{/if}
       <MapView devices={devices} links={mapLinks} stickIeee={snap.stickIeee} then={thenLinks} ghosts={view.at ? [] : ghosts} {joining} chosen={view.chosen} open={view.open} onpick={pick} onhold={hold}/>{/if}
     </div>
     {#if view.compare}<div class="legend"><span><i class="l solid"></i>New route</span><span><i class="l dashed"></i>Route that went</span></div>
@@ -166,6 +182,10 @@
     .select-bar{left:50%}
   }
   .runslot{min-width:0;overflow-y:auto}.runslot :global(.running){margin:0}
-  .mapwait{height:100%;min-height:240px;display:flex;align-items:center;justify-content:center;gap:10px;color:var(--muted);text-align:center;padding:20px}
+  .mapwrap{position:relative}.mapnote{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 24px));display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-radius:12px;background:var(--glass);border:1px solid var(--glass-border);font-size:13.5px;text-align:center;z-index:1}
+  .mapwait{height:100%;min-height:240px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:20px}
+  .asks{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;min-width:min(340px,100%);text-align:left}
+  .asks li{display:grid;grid-template-columns:22px 1fr auto;gap:8px;align-items:center;padding:6px 10px;border-radius:10px;background:var(--glass)}
+  .asks .ok .mark{color:var(--green)}.asks .silent .mark{color:var(--red)}.asks .waiting{opacity:.6}
   .mapwait .spin{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--blue);border-right-color:transparent;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 </style>

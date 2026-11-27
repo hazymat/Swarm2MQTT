@@ -2,6 +2,10 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 20, text: "Devices already on your network that Swarm2MQTT didn't know about (for example ones missing from Zigbee2MQTT's list) are found when they're heard, set up, and wait for you in Waiting for you.", go: "home"},
+  {id: 19, text: "Adding devices: each new device shows its steps (joined, got the key, said what it is, make and model, ready), its signal in dBm, and if it stops, why and what to do. Swarm2MQTT retries by itself each time it hears from it.", go: "home"},
+  {id: 18, text: "Join near: open joining on one plugged-in device, so a device you can't move (like a radiator valve) joins through the plug nearest to it.", go: "home"},
+  {id: 17, text: "The network map shows its check as it runs (which device it's asking, who didn't answer), and devices that haven't checked in since the start say \"Checking in\" instead of \"never\".", go: "home"},
   {id: 16, text: "Safer move from Zigbee2MQTT: the network is taken exactly as Zigbee2MQTT runs it and checked against what it reports live; an old coordinator backup from another adapter is left out. Swarm2MQTT never makes an adapter leave its network unless you asked for a new one, and always lets go of the adapter after a failed start."},
   {id: 15, text: "While the network isn't running, Home shows a live checklist: MQTT, Zigbee2MQTT stopped, the adapter (with the reason it can't connect and what to try) and what the adapter said. Setup now waits on a Start step until the network is really running."},
   {id: 14, text: "Errors say what happened in plain words, never \"Something went wrong\". Connecting to the adapter is blue, not red; tap it to see what's going on."},

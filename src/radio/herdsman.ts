@@ -2,7 +2,8 @@
 import {Controller, setLogger, setOtaConfiguration} from "zigbee-herdsman";
 import * as zhc from "zigbee-herdsman-converters";
 import {createRequire} from "node:module";
-import {Radio, type Control, type Kind, type Link, type RadioDevice} from "./radio.js";
+import {Radio, type Control, type Kind, type Link, type RadioDevice, type ScanProgress} from "./radio.js";
+import {stepFromLog} from "../joinwatch.js";
 
 export interface StickConfig {path: string; adapter: "ember" | "zstack"; baudRate?: number; rtscts?: boolean; panId: number; extendedPanId: number[]; channel: number; networkKey: number[]; formNew?: boolean}
 const OTA_SETTINGS = {requestTimeout: 150000, responseDelay: 250, baseSize: 50};
@@ -23,8 +24,12 @@ export function toControls(exposes: any[], guessed: boolean): Control[] {
 // What the library says while it talks to the adapter, so "can't connect" comes with the adapter's side of the story. Fine detail only while starting.
 export const adapterLog: string[] = [];
 let detailed = true;
+// the radio running now, for the library hooks below (one at a time)
+let current: HerdsmanRadio | undefined;
 const keep = (level: string, message: string | (() => string), namespace: string) => {const line = `${new Date().toISOString().slice(11, 19)} ${level} ${namespace.replace(/^zh:/, "")}: ${typeof message === "function" ? message() : message}`, same = (text?: string) => text?.slice(9).replace(/\d+/g, "#"); if (same(adapterLog[adapterLog.length - 1]) === same(line)) adapterLog[adapterLog.length - 1] = line; else adapterLog.push(line); if (adapterLog.length > 200) adapterLog.splice(0, adapterLog.length - 200)};
-setLogger({debug: (message, namespace) => {if (detailed) keep("debug", message, namespace)}, info: (message, namespace) => keep("info", message, namespace), warning: (message, namespace) => keep("warn", message, namespace), error: (message, namespace) => keep("error", message, namespace)});
+// interview steps come as the library's log lines; they're followed even when fine detail is off
+const follow = (message: string | (() => string)) => {if (typeof message === "string" && message.startsWith("Interview")) {const found = stepFromLog(message); if (found && current) {if (found.step) current.emit("joinStep", found.ieee, found.step, found.error); else current.emit("joinFailed", found.ieee, found.error)}}};
+setLogger({debug: (message, namespace) => {follow(message); if (detailed) keep("debug", message, namespace)}, info: (message, namespace) => keep("info", message, namespace), warning: (message, namespace) => {keep("warn", message, namespace); console.warn(adapterLog[adapterLog.length - 1])}, error: (message, namespace) => {keep("error", message, namespace); console.error(adapterLog[adapterLog.length - 1])}});
 const START_SECONDS = 90;
 
 // The library makes an adapter leave whatever network it holds when it isn't the one in our settings, then forms ours. That wipes someone's working network
@@ -36,6 +41,21 @@ Ezsp.prototype.ezspLeaveNetwork = function (...args: unknown[]) {
   if (allowLeave) return ezspLeave.apply(this, args);
   const held = adapterLog.slice().reverse().find(line => line.includes("Current adapter network"))?.match(/"panId":(\d+).*?"radioChannel":(\d+)/);
   throw new Error(`ADAPTER_HOLDS_OTHER_NETWORK${held ? ` pan ${held[1]} channel ${held[2]}` : ""}`);
+};
+// Ember adapters tell us more while a device joins: signal of every frame (dBm and link quality), whether each message got through, and which router let it in
+const ieeeOf = (nwk: number) => current?.controller?.getDeviceByNetworkAddress(nwk)?.ieeeAddr;
+const incoming = Ezsp.prototype.ezspIncomingMessageHandler;
+Ezsp.prototype.ezspIncomingMessageHandler = function (type: unknown, apsFrame: unknown, packetInfo: any, contents: unknown) {
+  try {const ieee = ieeeOf(packetInfo?.senderShortId); if (ieee) current?.emit("signal", ieee, packetInfo.lastHopRssi, packetInfo.lastHopLqi)} catch {}
+  return incoming.call(this, type, apsFrame, packetInfo, contents);
+};
+const emitEzsp = Ezsp.prototype.emit;
+Ezsp.prototype.emit = function (name: string, ...args: any[]) {
+  try {
+    if (name === "messageSent" && args[1] === 0 /* direct unicast */) {const ieee = ieeeOf(args[2]); if (ieee) current?.emit("delivery", ieee, args[0] === 0)}
+    if (name === "trustCenterJoin" && args[2] !== 2 /* not "left" */) {const [, eui64, , decision, parentNwk] = args; current?.emit("joinInfo", String(eui64), {parent: parentNwk === 0 ? undefined : ieeeOf(parentNwk), denied: decision === 2})}
+  } catch {}
+  return emitEzsp.call(this, name, ...args);
 };
 
 export class HerdsmanRadio extends Radio {
@@ -53,7 +73,7 @@ export class HerdsmanRadio extends Radio {
       adapter: {disableLED: false},
       acceptJoiningDeviceHandler: async () => true, // the app holds new devices in "Waiting for you" instead
     });
-    this.controller = controller;
+    this.controller = controller; current = this;
     controller.on("adapterDisconnected", () => this.emit("status", {up: false, reason: "Lost the Zigbee adapter."}));
     controller.on("permitJoinChanged", data => this.emit("permitJoin", data.permitted ? data.time ?? 1 : 0));
     controller.on("deviceJoined", data => this.emit("joined", data.device.ieeeAddr));
@@ -64,8 +84,10 @@ export class HerdsmanRadio extends Radio {
       this.emit("interview", data.device.ieeeAddr, data.status);
       this.libraryEvent("deviceInterview", data.device, {status: data.status});
     });
-    controller.on("deviceAnnounce", data => this.libraryEvent("deviceAnnounce", data.device));
+    controller.on("deviceAnnounce", data => {this.emit("joinStep", data.device.ieeeAddr, "secured"); this.emit("joinInfo", data.device.ieeeAddr, {sleepy: data.device.type === "EndDevice", router: data.device.type === "Router"}); this.libraryEvent("deviceAnnounce", data.device)});
     controller.on("message", data => this.onMessage(data));
+    // anything the library hears of by address (an announce, an address answer, its reply when we ask who sent unknown data) may be a stray
+    for (const name of ["onIEEEAddress", "onNetworkAddress", "onDeviceAnnounce"]) {const original = (controller as any)[name].bind(controller); (controller as any)[name] = (payload: any) => {this.adopt(payload.eui64, payload.nwkAddress); return original(payload)}}
     detailed = true; allowLeave = !!this.config.formNew;
     let timer: NodeJS.Timeout | undefined;
     try {await Promise.race([controller.start(), new Promise((_, reject) => {timer = setTimeout(() => reject(new Error(`The adapter didn't finish starting within ${START_SECONDS} seconds.`)), START_SECONDS * 1000)})])}
@@ -91,6 +113,15 @@ export class HerdsmanRadio extends Radio {
     const definition = this.definitions.get(device.ieeeAddr), coordinator = this.controller!.getDevicesByType("Coordinator")[0];
     if (!definition?.configure || !coordinator) return;
     try {await definition.configure(device, coordinator.getEndpoint(1), definition)} catch (error) {this.emit("state", device.ieeeAddr, {}, undefined)}
+  }
+  // A device on our network that the device list doesn't know (lost from Zigbee2MQTT's list, or the list was replaced) is ignored by the library for ever.
+  // Whenever one is heard of, it's set up as if it had just joined, and waits in "Waiting for you".
+  adopting = new Set<string>();
+  adopt(ieee: string, nwk: number) {
+    const controller: any = this.controller;
+    if (!controller || !ieee || this.adopting.has(ieee) || controller.getDeviceByIeeeAddr(ieee) || /^0x(0{16}|f{16})$/i.test(ieee) || typeof nwk !== "number" || nwk >= 0xfff8) return;
+    this.adopting.add(ieee); this.emit("stray", ieee);
+    Promise.resolve().then(() => controller.onDeviceJoined({ieeeAddr: ieee, networkAddress: nwk})).catch(() => {}).finally(() => this.adopting.delete(ieee));
   }
   libraryEvent(type: string, device: any, extra: Record<string, unknown> = {}) {
     const data = Object.assign({device, deviceExposesChanged: () => {}, state: this.states.get(device.ieeeAddr) ?? {}, options: {}}, extra);
@@ -135,17 +166,28 @@ export class HerdsmanRadio extends Radio {
     this.states.set(ieee, state);
   }
   async remove(ieee: string) {const device = this.device(ieee); await device.removeFromNetwork(); this.definitions.delete(ieee); this.states.delete(ieee)}
-  async permitJoin(seconds: number) {await this.controller!.permitJoin(seconds)}
+  // through one router only (a device that can't be moved, near that router), or anywhere
+  async permitJoin(seconds: number, viaIeee?: string) {await this.controller!.permitJoin(seconds, viaIeee ? this.device(viaIeee) : undefined)}
+  async reinterview(ieee: string) {
+    const device = this.device(ieee); this.emit("interview", ieee, "started");
+    try {await device.interview(true); await this.resolve(device); await this.configure(device); this.emit("interview", ieee, "successful")} catch (error) {this.emit("joinFailed", ieee, String((error as Error)?.message ?? error)); this.emit("interview", ieee, "failed")}
+  }
 
   // Who talks through whom: each router's neighbour table lists its children; routers hang off the strongest neighbour nearer the adapter
-  async scanLinks(): Promise<Link[]> {
+  async scanLinks(progress: (step: ScanProgress) => void = () => {}): Promise<Link[]> {
     const controller = this.controller!, links: Link[] = [], depth = new Map<string, number>(), routerNeighbours = new Map<string, {ieee: string; lqi: number}[]>();
-    const coordinator = controller.getDevicesByType("Coordinator")[0];
+    const coordinator = controller.getDevicesByType("Coordinator")[0], askList = [coordinator].concat(controller.getDevicesByType("Router"));
+    const state: ScanProgress = {done: 0, total: askList.length, answered: [], silent: []};
     depth.set(coordinator.ieeeAddr, 0);
-    for (const router of [coordinator].concat(controller.getDevicesByType("Router"))) {
+    for (const router of askList) {
       let table: any[] = [];
-      try {table = await router.lqi()} catch {continue}
+      progress(Object.assign(state, {asking: router.ieeeAddr}));
+      // one that doesn't answer within 20 s is noted and skipped, so the check always finishes
+      try {table = await Promise.race([router.lqi(), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("no answer")), 20000))]); state.answered.push({ieee: router.ieeeAddr, hears: table.length})}
+      catch {state.silent.push(router.ieeeAddr); state.done++; continue}
+      state.done++;
       for (const entry of table) {
+        if (!controller.getDeviceByIeeeAddr(entry.eui64)) this.adopt(entry.eui64, entry.nwkAddress);
         if (entry.relationship === 1 && entry.deviceType === 2) links.push({child: entry.eui64, parent: router.ieeeAddr, lqi: entry.lqi});
         if (entry.deviceType === 1 || entry.deviceType === 0) {const list = routerNeighbours.get(entry.eui64) ?? []; list.push({ieee: router.ieeeAddr, lqi: entry.lqi}); routerNeighbours.set(entry.eui64, list); if (entry.depth !== undefined) depth.set(entry.eui64, entry.depth)}
       }
@@ -156,8 +198,10 @@ export class HerdsmanRadio extends Radio {
       const best = nearer[0] ?? neighbours.sort((first, second) => second.lqi - first.lqi)[0];
       if (best) links.push({child: routerIeee, parent: best.ieee, lqi: best.lqi});
     }
+    progress(Object.assign(state, {asking: undefined}));
     return links;
   }
+  async ping(ieee: string) {await this.device(ieee).ping()}
   target(to: string | number) {return typeof to === "number" ? (this.controller!.getGroupByID(to) ?? this.controller!.createGroup(to)) : this.device(to).getEndpoint(1)}
   async bind(fromIeee: string, to: string | number, unbind = false) {
     const source = this.device(fromIeee), target = this.target(to);

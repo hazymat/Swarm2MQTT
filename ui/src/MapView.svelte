@@ -19,11 +19,12 @@
       for (const ieee of routers) if (depth < 6) place(ieee, depth + 1);
     };
     place(stickIeee, 0);
-    // devices not in the last scan sit along the bottom
-    const loose = devices.filter(device => !spot.has(device.ieee));
-    loose.forEach((device, index) => spot.set(device.ieee, {x: 80 + (index % 9) * 92, y: HEIGHT - 50 - Math.floor(index / 9) * 80, angle: 0, loose: true}));
+    // devices not in the last scan: round the adapter while there's no map at all, else along the bottom under a label
+    const loose = devices.filter(device => !spot.has(device.ieee)), ring = !links.length;
+    loose.forEach((device, index) => {const angle = index / loose.length * Math.PI * 2 - Math.PI / 2, radius = loose.length > 10 ? 300 : 230; spot.set(device.ieee, ring ? {x: CX + Math.cos(angle) * radius, y: CY + Math.sin(angle) * radius, angle, loose: true} : {x: 80 + (index % 9) * 92, y: HEIGHT - 50 - Math.floor(index / 9) * 80, angle: 0, loose: true})});
+    const strip = !ring && loose.length ? HEIGHT - 50 - Math.floor((loose.length - 1) / 9) * 80 - 50 : 0;
     for (const [ieee, position] of Object.entries(moved)) if (spot.has(ieee)) spot.set(ieee, Object.assign({}, spot.get(ieee), position));
-    return {spot, parentOf};
+    return {spot, parentOf, strip};
   });
   const at = ieee => layout.spot.get(ieee);
   const key = link => `${link.child}>${link.parent}`;
@@ -53,6 +54,7 @@
   {/each}
   {#if joining}{#each devices.filter(device => device.kind === "router" && device.health.online) as device}{#if at(device.ieee)}{#each [34, 54, 76] as radius, index}<circle class="beacon" cx={at(device.ieee).x} cy={at(device.ieee).y} r={radius} style="animation-delay:{index * .35}s"/>{/each}{/if}{/each}
     {#each [48, 70, 94] as radius, index}<circle class="beacon" cx={CX} cy={CY} r={radius} style="animation-delay:{index * .35}s"/>{/each}{/if}
+  {#if layout.strip}<line class="strip" x1="30" x2={WIDTH - 30} y1={layout.strip} y2={layout.strip}/><text class="striplabel" x="30" y={layout.strip - 10}>Not in the last check</text>{/if}
   <g class="node" onpointerdown={event => event.stopPropagation()}>
     <path d="M{CX} {CY - 34}l29.5 17v34L{CX} {CY + 34}l-29.5-17v-34z" fill="#2a2a33" stroke="#f2c14e" stroke-width="3"/><circle cx={CX} cy={CY} r="8" fill="#f2c14e"/>
     <text x={CX} y={CY + 58}>Adapter</text>
@@ -85,6 +87,8 @@
   .halo{stroke:color-mix(in srgb,var(--accent) 45%,transparent);stroke-width:12;stroke-linecap:round}
   .node{cursor:pointer}
   text{fill:var(--text);font-size:15px;font-weight:500;text-anchor:middle;paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round}
+  .strip{stroke:var(--glass-border);stroke-width:1.5;stroke-dasharray:6 6}
+  text.striplabel{text-anchor:start;font-size:13px;fill:var(--muted)}
   text.why{font-size:13px;font-weight:600}
   .beacon{fill:none;stroke:var(--amber);stroke-width:2;animation:pulse 1.6s ease-out infinite;opacity:0}
   @keyframes pulse{0%{opacity:.9}100%{opacity:0}}
