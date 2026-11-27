@@ -383,8 +383,8 @@ export class App extends EventEmitter {
     this.update.running = true; this.changed();
     this.log("info", `Updating Swarm2MQTT to ${tag}…`);
     const code = await new Promise<number>(resolve => spawn("bash", [`${dir}/install.sh`, "--update", "v" + tag], {stdio: "ignore"}).on("exit", exitCode => resolve(exitCode ?? 1)).on("error", () => resolve(1)));
-    this.update.running = false; this.changed();
-    if (code !== 0) {this.log("warn", "The update didn't finish. Still running the old version."); throw new Error("The update didn't finish. Still running the old version.")}
+    // on success it stays "running" until the restart, so the page never offers the update again in between
+    if (code !== 0) {this.update.running = false; this.changed(); this.log("warn", "The update didn't finish. Still running the old version."); throw new Error("The update didn't finish. Still running the old version.")}
     this.log("info", `Updated to ${tag}. Restarting.`);
     setTimeout(() => process.exit(75), 500);
   }

@@ -4,13 +4,16 @@
   import {view, save} from "./ui.svelte.js";
   let {inset = false} = $props();
   let update = $derived(live.snap?.update ?? {});
-  let showing = $derived(!!update.available && (view.updateLater !== update.latest || !!update.running));
+  // pressed Update now: stay "Updating…" (through the restart too) until the new version's page loads
+  let pressed = $state(""), updating = $derived(!!update.running || !!pressed);
+  let showing = $derived(updating || (!!update.available && view.updateLater !== update.latest));
+  async function updateNow() {pressed = update.latest; try {await act("updateNow")} catch {pressed = ""}}
   $effect(() => {document.body.classList.toggle("has-update", showing)});
 </script>
 {#if showing}
   <div class="updatebar" class:inset>
-    <span class="dot pulse"></span><span class="message"><span class="name">Swarm2MQTT </span>{update.running ? `Updating to ${update.latest}…` : `${update.latest} is out`}</span>
-    {#if !update.running}<button class="later" onclick={() => {view.updateLater = update.latest; save("s2m-update-later", update.latest)}}>Later</button><button class="now" onclick={() => act("updateNow").catch(() => {})}>Update now</button>{/if}
+    <span class="dot pulse"></span><span class="message"><span class="name">Swarm2MQTT </span>{updating ? `Updating to ${pressed || update.latest}…` : `${update.latest} is out`}</span>
+    {#if !updating}<button class="later" onclick={() => {view.updateLater = update.latest; save("s2m-update-later", update.latest)}}>Later</button><button class="now" onclick={updateNow}>Update now</button>{/if}
   </div>
 {/if}
 <style>

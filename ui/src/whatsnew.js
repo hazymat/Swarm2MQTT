@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 10, text: "Update now stays on Updating… until the new version is running, then What's new opens. It no longer offers the update again for a moment in between."},
   {id: 9, text: "Setup, MQTT: a Zigbee2MQTT only counts as running if it answers right then. One that doesn't, but left its messages on your MQTT server, shows greyed out as an old install, with Remove its old messages."},
   {id: 8, text: "Boxes that need a format (MQTT server, adapter address, channel) now show it under the box, and it stays there while you type.", go: "settings", at: "#mqtt-server"},
   {id: 7, text: "Setup now starts with your MQTT server, with a green tick once it connects and any Zigbee2MQTT it finds there. Moving over? Swarm2MQTT asks Zigbee2MQTT for its network over MQTT (no files to copy), lists the devices so you can untick any to leave waiting, fills in the adapter, and tells you once Zigbee2MQTT has stopped."},
