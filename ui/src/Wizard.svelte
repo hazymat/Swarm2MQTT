@@ -3,6 +3,9 @@
   import {live, act, call, toast} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
   import {readBackupFiles} from "./z2mzip.js";
+  import AddressField from "./AddressField.svelte";
+  const MQTT_KINDS = [{label: "mqtt://", scheme: "mqtt", port: 1883}, {label: "mqtts://", scheme: "mqtts", port: 8883}];
+  const ADAPTER_KINDS = [{label: "Network", scheme: "tcp", port: 6638}, {label: "USB", path: true, placeholder: "/dev/ttyUSB0"}];
   view.wizard = true;
   let snap = $derived(live.snap);
   let step = $state(1), busy = $state(false);
@@ -33,8 +36,11 @@
   const toggle = ieee => chosen = chosen.includes(ieee) ? chosen.filter(other => other !== ieee) : chosen.concat([ieee]);
   // 3 Adapter
   let path = $state(""), adapter = $state("ember"), checks = $state(null);
-  const HINTS = {ember: {likely: "tcp://<IP address>:6638", likelyWhere: "for an adapter on your network (SMLIGHT and similar)", other: "/dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "/dev/ttyUSB0", likelyWhere: "for an adapter plugged into this machine (Sonoff P, CC2652)", other: "tcp://<IP address>:6638", otherWhere: "on your network"}};
+  const HINTS = {ember: {likely: "Network, then its IP address (port 6638)", likelyWhere: "for an adapter on your network (SMLIGHT and similar)", other: "USB, then /dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "USB, then /dev/ttyUSB0", likelyWhere: "for an adapter plugged into this machine (Sonoff P, CC2652)", other: "Network, then its IP address (port 6638)", otherWhere: "on your network"}};
   let hint = $derived(HINTS[adapter]);
+  // a changed address needs checking again
+  $effect(() => {mqtt.url; probe = null; probeError = ""});
+  $effect(() => {path; checks = null});
   // brief, read-only look at the adapter (nothing is sent, let go at once); when moving over, also whether Zigbee2MQTT has stopped
   async function checkAdapter() {
     busy = true;
@@ -64,8 +70,8 @@
     <section class="card">
       <h2>Your MQTT server</h2>
       <p class="muted">First, because it's how Swarm2MQTT talks to the rest of your home. If you're moving from Zigbee2MQTT, it's also how Swarm2MQTT asks it for your network, so nothing needs copying by hand.</p>
-      <input class="text" placeholder="mqtt://<IP address>:1883" bind:value={mqtt.url} oninput={() => {probe = null; probeError = ""}} onkeydown={event => {if (event.key === "Enter" && mqtt.url && !busy) connectMqtt()}}>
-      <div class="fieldhint">Like <code>mqtt://&lt;IP address&gt;:1883</code> (1883 is the usual port; <code>mqtts://</code> for an encrypted one)</div>
+      <AddressField bind:value={mqtt.url} kinds={MQTT_KINDS} onenter={() => {if (mqtt.url && !busy) connectMqtt()}}/>
+      <div class="fieldhint">Your MQTT server's IP address or name. The port is usually 1883 (8883 for mqtts).</div>
       <div class="two"><input class="text" placeholder="User (if any)" bind:value={mqtt.username}><input class="text" type="password" placeholder="Password" bind:value={mqtt.password}></div>
       {#if probe}
         <div class="headline"><span class="big">✓</span>Connected to the MQTT server ({Math.max(1, probe.ms)} ms)</div>
@@ -130,8 +136,8 @@
       <h2>Where is your Zigbee adapter?</h2>
       {#if from === "z2m" && network?.adapterPath}<p class="muted">Filled in from Zigbee2MQTT.</p>{/if}
       <div class="seg"><button class:on={adapter === "ember"} onclick={() => {adapter = "ember"; checks = null}}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => {adapter = "zstack"; checks = null}}>Z-Stack (Sonoff P, CC2652)</button></div>
-      <input class="text" placeholder={hint.likely} bind:value={path} oninput={() => checks = null} onkeydown={event => {if (event.key === "Enter" && path && !busy) checkAdapter()}}>
-      <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: <code>{hint.likely}</code><br>Or, {hint.otherWhere}: <code>{hint.other}</code></span></div>
+      {#key adapter}<AddressField bind:value={path} kinds={ADAPTER_KINDS} defaultKind={adapter === "zstack" && !path ? 1 : 0} onenter={() => {if (path && !busy) checkAdapter()}}/>{/key}
+      <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: {hint.likely}.<br>Or, {hint.otherWhere}: {hint.other}.</span></div>
       {#if from === "z2m"}<div class="callout info"><span class="t">Stop Zigbee2MQTT now: only one of them can use the adapter. The check below tells you if it's still running.</span></div>{/if}
       {#if checks}
         <div class="headline {checks.result}"><span class="big">{checks.result === "bad" ? "✕" : "✓"}</span>{checks.headline}</div>

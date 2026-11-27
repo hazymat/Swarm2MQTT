@@ -3,6 +3,9 @@
   import {view, save} from "./ui.svelte.js";
   import {dayClock} from "./util.js";
   import {readBackupFiles} from "./z2mzip.js";
+  import AddressField from "./AddressField.svelte";
+  const MQTT_KINDS = [{label: "mqtt://", scheme: "mqtt", port: 1883}, {label: "mqtts://", scheme: "mqtts", port: 8883}];
+  const ADAPTER_KINDS = [{label: "Network", scheme: "tcp", port: 6638}, {label: "USB", path: true, placeholder: "/dev/ttyUSB0"}];
   let snap = $derived(live.snap);
   let mqtt = $state(Object.assign({}, live.snap.mqtt.settings));
   let prefs = $state(Object.assign({}, live.snap.prefs));
@@ -15,7 +18,7 @@
 <div class="settings">
   <section class="card">
     <h2>MQTT {#if snap.mqtt.connected}<span class="ok">✓ Connected</span>{:else if snap.mqtt.error}<span class="bad">{snap.mqtt.error}</span>{:else if snap.mqtt.settings.url}<span class="muted">Connecting…</span>{/if}</h2>
-    <div class="kv" id="mqtt-server"><span class="k">Server</span><div class="field"><input class="text" placeholder="mqtt://<IP address>:1883" bind:value={mqtt.url}><div class="fieldhint">Like <code>mqtt://&lt;IP address&gt;:1883</code></div></div></div>
+    <div class="kv" id="mqtt-server"><span class="k">Server</span><div class="field"><AddressField bind:value={mqtt.url} kinds={MQTT_KINDS}/><div class="fieldhint">The port is usually 1883 (8883 for mqtts).</div></div></div>
     <div class="kv"><span class="k">User</span><input class="text" bind:value={mqtt.username} autocomplete="off"></div>
     <div class="kv"><span class="k">Password</span><input class="text" type="password" bind:value={mqtt.password} autocomplete="new-password"></div>
     <div class="kv"><span class="k">Base topic</span><input class="text" bind:value={mqtt.baseTopic}></div>
@@ -69,7 +72,7 @@
   <section class="card">
     <button class="h2btn" onclick={() => advanced = !advanced}><h2>Advanced {advanced ? "▾" : "▸"}</h2></button>
     {#if advanced}
-      <div class="kv"><span class="k">Adapter address</span><div class="field"><input class="text" placeholder="tcp://<IP address>:6638" bind:value={stickPath}><div class="fieldhint">On your network: <code>tcp://&lt;IP address&gt;:6638</code>. Plugged in here: <code>/dev/ttyUSB0</code></div></div><span class="seg"><button class:on={stickType === "ember"} onclick={() => stickType = "ember"}>Ember</button><button class:on={stickType === "zstack"} onclick={() => stickType = "zstack"}>Z-Stack</button></span><button class="pill ghost" disabled={!stickPath} onclick={() => act("stickPath", {path: stickPath, adapter: stickType})}>Use</button></div>
+      <div class="kv"><span class="k">Adapter address</span><div class="field"><AddressField bind:value={stickPath} kinds={ADAPTER_KINDS}/><div class="fieldhint">On your network: its IP address, port 6638. Plugged in here: /dev/ttyUSB0</div></div><span class="seg"><button class:on={stickType === "ember"} onclick={() => stickType = "ember"}>Ember</button><button class:on={stickType === "zstack"} onclick={() => stickType = "zstack"}>Z-Stack</button></span><button class="pill ghost" disabled={!stickPath} onclick={() => act("stickPath", {path: stickPath, adapter: stickType})}>Use</button></div>
       <div class="kv"><span class="k">Channel</span><span class="unit"><input class="text num" type="number" min="11" max="26" placeholder={String(snap.radio.channel ?? "")} bind:value={channel}><span class="fieldhint">11 to 26{snap.radio.channel ? `, now ${snap.radio.channel}` : ""}</span><button class="pill ghost" disabled={!Number(channel)} onclick={() => toast(`Changing to channel ${channel}. Some devices may need to rejoin.`, null, "info", () => act("channel", {channel: Number(channel)}).catch(() => {}))}>Change</button></span></div>
       <div class="kv"><span class="k">Import from Zigbee2MQTT</span><label class="pill ghost">Pick its files<input type="file" multiple accept=".zip,.yaml,.db,.json" hidden onchange={event => readBackupFiles(event.currentTarget.files).then(files => {z2mFiles = files; return call("z2mPreview", {files})}).then(result => z2mPreview = result).catch(error => toast(error.message, null, "bad"))}></label><span class="muted">configuration.yaml, database.db and coordinator_backup.json from its data folder, or a zip of it</span></div>
       {#if z2mPreview}<div class="callout info"><span class="t">Found {z2mPreview.summary}. Stop Zigbee2MQTT first: only one can use the adapter.</span><button class="pill" onclick={() => act("z2mImport", {files: z2mFiles, keepBaseTopic: true}).then(() => z2mPreview = null)}>Import</button></div>{/if}
