@@ -12,4 +12,4 @@ Every Zigbee device Zigbee2MQTT supports, with a live map that shows what's wron
 
 Status: spec stage. See [SPEC.md](SPEC.md).
 
-Built on [zigbee-herdsman](https://github.com/Koenkk/zigbee-herdsman) and [zigbee-herdsman-converters](https://github.com/Koenkk/zigbee-herdsman-converters) (MIT), the libraries that power Zigbee2MQTT. Not affiliated with the Zigbee2MQTT project.
+Built on [zigbee-herdsman](https://github.com/Koenkk/zigbee-herdsman) and [zigbee-herdsman-converters](https://github.com/Koenkk/zigbee-herdsman-converters) (MIT), the libraries that power Zigbee2MQTT. Licensed GPL-3.0. Not affiliated with the Zigbee2MQTT project.

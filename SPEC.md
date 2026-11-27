@@ -1,4 +1,4 @@
-# Swarm2MQTT: spec (draft 4, 27 Nov 2026)
+# Swarm2MQTT: spec (draft 5, 27 Nov 2026)
 
 **Swarm2MQTT**. A replacement for Zigbee2MQTT that you never have to understand Zigbee to use.
 
@@ -225,15 +225,15 @@ The translation table is a file in the repo. Any error without an entry shows "S
 ## 8. Reused, and credit
 
 - **zigbee-herdsman** and **zigbee-herdsman-converters** (both MIT, maintained by Koen Kanters and the Zigbee2MQTT community). Used as npm dependencies, unmodified. Credited in About and README. Device-support fixes go upstream to converters, not into a private fork.
-- **Device pictures** are loaded from zigbee2mqtt.io the first time a device appears, then cached locally so they still show offline. Not bundled in the app or repo (that site's repo is GPL-3.0). A generic shape (plug, bulb, sensor, switch) shows until the picture arrives or if it can't be fetched.
-- **Zigbee2MQTT itself** (GPL-3.0): no code copied. Its data-folder format is read for import only.
+- **Device pictures** are loaded from zigbee2mqtt.io the first time a device appears, then cached locally so they still show offline. Not bundled, so the app stays small and new devices get pictures without a release. A generic shape (plug, bulb, sensor, switch) shows until the picture arrives or if it can't be fetched.
+- **Swarm2MQTT is GPL-3.0**, the same licence as Zigbee2MQTT. Reusing Z2M code is allowed with credit, but the plan is still to build on the two libraries, not to fork Z2M. Its data-folder format is read for import.
 - Name must not include "zigbee2mqtt".
 
 ---
 
 ## 9. Not in v1
 
-Home Assistant discovery (Node-RED and plain MQTT only), a login for the web page (meant for a trusted home network), extensions/plugins, Touchlink beyond Advanced, multiple sticks, translations (English first, then the usual 16 if it goes public), Docker/HA add-on packaging.
+Home Assistant discovery (Node-RED and plain MQTT only), a login for the web page (meant for a trusted home network), extensions/plugins, Touchlink beyond Advanced, multiple sticks, translations (English first, then the usual 16), Docker/HA add-on packaging.
 
 ---
 
@@ -257,6 +257,22 @@ Rejected: Plainbee, Zigview, Zigherd, ZigMQTT (and any Zig- name), BeeMQTT, Zigb
 
 ---
 
-## 12. Open questions
+## 12. Product decisions (v1)
+
+- **Sticks:** Ember and Z-Stack. Any other stick gets "This stick isn't supported yet" with its name, never a crash. No model-specific workarounds in the app.
+- **New devices wait for you.** A joined device goes to **Waiting for you** and sends no MQTT until accepted. Accept or reject, both undoable (a reject is undone by the guided rejoin).
+- **Unknown devices** get best-guess controls built from what the device reports, marked "guessed". You can remove, change or re-add them, and add others from the device's list of everything it reports. Undoable.
+- **Firmware updates:** one tap per device. Blue "Update available", progress and time left. Never automatic.
+- **Direct control:** drag a switch onto a light or group to bind them. Shown as a line on the map, keeps working with the server or MQTT down. Undoable.
+- **History:** 30 days per value, kept by the server as updates arrive. Graphs in the device panel, battery trend with "about N weeks left".
+- **Backups:** daily and before every change, newest 14 kept. Settings > Backup lists them; restore is one tap.
+- **Phones:** installable web app (add to home screen), same page.
+- **Import without re-pairing:** Zigbee2MQTT only.
+- **Base topic:** a setting, default `swarm2mqtt` (§6).
+- **Monitoring:** retained bridge state with last will, and a heartbeat on `<base>/bridge/tele` (§6). Nothing else is needed to watch it.
+- **Install:** Linux, Node service, one command; in-app Update now; dev and stable channels (§2).
+- **Not in v1:** Home Assistant discovery, a login for the web page (§9).
+
+## 13. Open questions
 
 None right now.
