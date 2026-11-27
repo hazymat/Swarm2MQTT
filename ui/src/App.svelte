@@ -111,9 +111,9 @@
   .content{flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
   @media (max-width:700px){
     /* phone: a plain bar like a native tab bar; the current page has a soft blue fill, the buttons sit a little into the home-bar area */
-    #sidebar{inset:auto 0 var(--status-h) 0;width:auto;flex-direction:row;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px 8px calc(6px + max(0px, env(safe-area-inset-bottom) - 18px));background:color-mix(in srgb,var(--bg) 88%,transparent);border-right:0;border-top:1px solid var(--glass-border)}
+    #sidebar{inset:auto 0 var(--status-h) 0;width:auto;flex-direction:row;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px 8px calc(6px + max(0px, env(safe-area-inset-bottom) - 18px));background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-right:0;border-top:1px solid var(--glass-border);box-shadow:var(--glass-highlight),var(--bar-shadow)}
     #wordmark{display:none}
-    .nav-item{position:relative;flex-direction:column;gap:2px;min-width:0;padding:6px 2px;border:1px solid transparent;border-radius:12px;font-size:.7rem;font-weight:400;text-align:center}
+    .nav-item{position:relative;flex-direction:column;gap:2px;min-width:0;padding:6px 2px;border:1px solid transparent;border-radius:14px;font-size:.7rem;font-weight:400;text-align:center}
     .nav-item.active{background:var(--active-bg);border-color:var(--active-border);color:var(--text)}
     .nav-item:hover:not(.active){background:none}
     .nav-item::after{content:"";position:absolute;left:-2px;right:-2px;top:-7px;bottom:calc(-7px - max(0px, env(safe-area-inset-bottom) - 18px))} /* a tap just under a button still opens it */
