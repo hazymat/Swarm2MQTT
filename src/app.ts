@@ -253,6 +253,8 @@ export class App extends EventEmitter {
     if (fields.status === "accepted") {this.mqtt.device(device, device.state); this.mqtt.availability(device, this.healthOf(device).online)}
     this.changed();
   }
+  // your own words about it (blank: make and model show instead)
+  setNote(ieee: string, note: string) {const device = this.need(ieee), text = String(note ?? "").trim(); return this.patchDevice(ieee, {note: text || null} as any, text ? `${device.name}: description set` : `${device.name}: description cleared`)}
   rename(ieee: string, name: string) {
     const device = this.need(ieee); name = name.trim();
     if (!name) throw new Error("A name can't be empty.");

@@ -56,7 +56,7 @@ export function readZ2m(files: Z2mFiles): Z2mImport {
     let entry: any; try {entry = JSON.parse(line)} catch {continue}
     if (!entry.ieeeAddr || entry.type === "Coordinator" || entry.type === "Group") continue;
     const name = names[entry.ieeeAddr]?.friendly_name ?? entry.ieeeAddr;
-    devices.push({ieee: entry.ieeeAddr, name, topic: name, format: "json", renames: {}, status: "accepted", kind: entry.type === "Router" ? "router" : "battery", model: entry.modelId, vendor: entry.manufName, supported: true, controls: [], hidden_controls: [], added_at: now, state: {}, gaps: []});
+    devices.push({ieee: entry.ieeeAddr, name, topic: name, format: "json", renames: {}, status: "accepted", kind: entry.type === "Router" ? "router" : "battery", model: entry.modelId, vendor: entry.manufName, note: names[entry.ieeeAddr]?.description || undefined, supported: true, controls: [], hidden_controls: [], added_at: now, state: {}, gaps: []});
   }
   const groups: GroupRow[] = Object.entries(config.groups ?? {}).map(([id, group]: [string, any]) => ({id: Number(id), name: group.friendly_name ?? `Group ${id}`, topic: group.friendly_name ?? `group_${id}`, members: (group.devices ?? []).map((member: string) => {const ieee = member.split("/")[0]; return devices.find(device => device.name === ieee)?.ieee ?? ieee})}));
   const mqttConfig = config.mqtt ?? {}, mqtt: Partial<MqttSettings> = {url: resolve(mqttConfig.server), username: resolve(mqttConfig.user), password: resolve(mqttConfig.password), baseTopic: mqttConfig.base_topic ?? "zigbee2mqtt"};

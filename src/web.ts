@@ -49,6 +49,7 @@ const z2mFiles = (args: any): Z2mFiles => args.files ? pickFiles(args.files) : f
 async function command(app: App, name: string, args: any): Promise<unknown> {
   switch (name) {
     case "rename": return app.rename(args.ieee, args.name);
+    case "note": return app.setNote(args.ieee, args.note);
     case "topic": return app.setTopic(args.ieee, args.topic);
     case "format": return app.setFormat(args.ieee, args.format);
     case "renames": return app.setRenames(args.ieee, args.renames);

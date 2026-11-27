@@ -1,7 +1,7 @@
 <script>
   import {live, act, call, toast} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
-  import {STATUS_COLOUR, STATUS_WORD, ago, duration, dayClock, valueText, rssiWord} from "./util.js";
+  import {STATUS_COLOUR, STATUS_WORD, ago, duration, dayClock, valueText, rssiWord, makeModel} from "./util.js";
   import {weeksText} from "./weeks.js";
   import Icon from "./Icon.svelte";
   import Pic from "./Pic.svelte";
@@ -32,8 +32,10 @@
   let stripTip = $state(null);
   // editing
   let editingName = $state(false), nameDraft = $state(""), topicDraft = $state(""), editingTopic = $state(false), overrideDraft = $state("");
-  async function saveName() {editingName = false; if (nameDraft.trim() && nameDraft !== device.name) await act("rename", {ieee: device.ieee, name: nameDraft}).catch(() => {})}
-  async function saveTopic() {editingTopic = false; if (topicDraft.trim() && topicDraft !== device.topic) await act("topic", {ieee: device.ieee, topic: topicDraft}).catch(() => {})}
+  async function saveName() {if (!editingName) return; editingName = false; if (nameDraft.trim() && nameDraft !== device.name) await act("rename", {ieee: device.ieee, name: nameDraft}).catch(() => {})}
+  let editingNote = $state(false), noteDraft = $state("");
+  async function saveNote() {if (!editingNote) return; editingNote = false; if (noteDraft.trim() !== (device.note ?? "")) await act("note", {ieee: device.ieee, note: noteDraft}).catch(() => {})}
+  async function saveTopic() {if (!editingTopic) return; editingTopic = false; if (topicDraft.trim() && topicDraft !== device.topic) await act("topic", {ieee: device.ieee, topic: topicDraft}).catch(() => {})}
   function setValue(control, value) {act(control.setting ? "setting" : "set", control.setting ? {ieee: device.ieee, property: control.property, value} : {ieee: device.ieee, values: {[control.property]: value}}).catch(() => {})}
   let renames = $state({});
   $effect(() => {renames = Object.assign({}, device.renames)});
@@ -55,7 +57,9 @@
     <div class="title">
       {#if editingName}<input class="text big" bind:value={nameDraft} onblur={saveName} onkeydown={event => {if (event.key === "Enter") saveName(); if (event.key === "Escape") {event.stopPropagation(); editingName = false}}} autofocus>
       {:else}<button class="name" onclick={() => {nameDraft = device.name; editingName = true}} title="Rename">{device.name} <Icon name="edit" small/></button>{/if}
-      <div class="muted desc">{[device.vendor, device.description].filter(Boolean).join(" · ") || device.model}</div>
+      {#if editingNote}<input class="text" bind:value={noteDraft} placeholder="What it is, where it is" onblur={saveNote} onkeydown={event => {if (event.key === "Enter") saveNote(); if (event.key === "Escape") {event.stopPropagation(); editingNote = false}}} autofocus>
+      {:else}<button class="desc" class:muted={!device.note} onclick={() => {noteDraft = device.note ?? ""; editingNote = true}} title="Edit description">{device.note || makeModel(device) || "Add a description"} <Icon name="edit" small/></button>{/if}
+      {#if device.description}<div class="faint small">{device.description}</div>{/if}
     </div>
   </div>
 
@@ -197,7 +201,7 @@
   .name{font-size:21px;font-weight:500;display:flex;align-items:center;gap:6px;text-align:left}
   .name :global(.icon){opacity:.5}
   .text.big{font-size:19px}
-  .desc{font-size:14px}
+  .desc{font-size:14px;text-align:left;display:inline-flex;align-items:center;gap:6px;color:var(--text)}.desc.muted{color:var(--muted)}
   .startagain{padding:12px 14px;display:flex;flex-direction:column;gap:6px}.startagain ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.startagain .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .v{display:flex;align-items:center;gap:8px}

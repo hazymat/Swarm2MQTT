@@ -1,7 +1,7 @@
 <script>
   import {live, act, call, toast, undo} from "./api.svelte.js";
   import {view, toggleChosen, seeHint} from "./ui.svelte.js";
-  import {STATUS_COLOUR, ago, dayClock, deviceBars, holdable} from "./util.js";
+  import {STATUS_COLOUR, ago, dayClock, deviceBars, holdable, makeModel} from "./util.js";
   import Icon from "./Icon.svelte";
   import Pic from "./Pic.svelte";
   import MapView from "./MapView.svelte";
@@ -18,7 +18,7 @@
     return rows.map(row => {const answered = scan.answered.find(entry => entry.ieee === row.ieee); return Object.assign({}, row, {state: answered ? "ok" : scan.silent.includes(row.ieee) ? "silent" : scan.running && scan.asking === row.ieee ? "asking" : "waiting", hears: answered?.hears})});
   });
   let order = {bad: 0, warn: 1, waiting: 2, new: 3, ok: 4};
-  let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => order[first.health.status] - order[second.health.status] || first.name.localeCompare(second.name)));
+  let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.note ?? "") + " " + (device.vendor ?? "") + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => order[first.health.status] - order[second.health.status] || first.name.localeCompare(second.name)));
   let waiting = $derived(devices.filter(device => device.status === "waiting"));
   let joining = $derived(snap.join.endsAt > view.now);
   let tab = $state("map"); // phone only: Map | Devices
@@ -93,7 +93,7 @@
           {#each waiting as device (device.ieee)}
             <div class="row">
               <Pic {device}/>
-              <button class="main" onclick={() => view.open = device.ieee}><div class="name">{device.name}</div><div class="sub">{device.vendor ?? ""} {device.description ?? ""}</div></button>
+              <button class="main" onclick={() => view.open = device.ieee}><div class="name">{device.name}</div><div class="sub">{device.note || makeModel(device)}</div></button>
               <button class="pill" style="background:var(--mint)" onclick={() => act("accept", {ieee: device.ieee})}>Accept</button>
               <button class="pill ghost" onclick={() => toast(`Rejecting ${device.name}`, null, "info", () => act("reject", {ieee: device.ieee}).catch(() => {}))}>Reject</button>
             </div>
@@ -108,7 +108,7 @@
             <Pic {device}/>
             <span class="main">
               <span class="name">{device.name}{#if device.health.status !== "ok"}<span class="dot" style="background:{STATUS_COLOUR[device.health.status]}"></span>{/if}</span>
-              <span class="sub">{device.health.reason ?? device.description ?? device.model ?? ""}</span>
+              <span class="sub">{device.health.reason ?? (device.note || makeModel(device))}</span>
             </span>
             <span class="meta">
               {#if device.health.battery}<span title="Battery">{device.health.battery.percent}%</span>{/if}

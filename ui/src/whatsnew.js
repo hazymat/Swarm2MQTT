@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 25, text: "Each device has a description you can write, under its name: tap it to edit. Until you do, it shows the make and model. Search finds it, and descriptions come over from Zigbee2MQTT.", go: "home"},
   {id: 24, text: "A device that never finished joining says so, and offers Remove and add again: it's taken off the network and out of the adapter (even if it doesn't answer), then joining opens for it to come back fresh. If it comes back without having been reset, Activity says so.", go: "home"},
   {id: 23, text: "Signal shows in dBm with a plain word (Strong, Fair, Weak) on a device's page, and the bars use how well the adapter hears the device's own messages, not a neighbour's view of it.", go: "home"},
   {id: 22, text: "Setup from Zigbee2MQTT says it keeps Zigbee2MQTT's MQTT topic, so whatever listens carries on, and that you can change it later in Settings > MQTT."},
