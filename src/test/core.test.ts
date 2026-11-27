@@ -18,8 +18,10 @@ async function until(check: () => boolean, ms = 8000) {const end = Date.now() + 
 
 test("check-ins: fallback until learnt, then three missed check-ins", () => {
   assert.equal(checkIns(row({gaps: [600e3, 600e3]})).offlineAfterMs, FALLBACK_OFFLINE.battery);
-  const learnt = checkIns(row({gaps: Array(20).fill(600e3)}));
-  assert.equal(learnt.source, "learnt"); assert.equal(learnt.typicalMs, 600e3); assert.equal(learnt.offlineAfterMs, 1800e3);
+  assert.equal(checkIns(row({gaps: Array(20).fill(30e3)})).source, "fallback"); // a motion burst isn't a rhythm
+  const learnt = checkIns(row({gaps: Array(50).fill(3600e3)}));
+  assert.equal(learnt.source, "learnt"); assert.equal(learnt.typicalMs, 3600e3); assert.equal(learnt.offlineAfterMs, 3 * 3600e3);
+  assert.equal(checkIns(row({gaps: Array(200).fill(600e3)})).offlineAfterMs, 2 * 3600e3); // never sooner than a battery device's floor
   assert.equal(checkIns(row({gaps: Array(20).fill(600e3), offline_after_override: 5000})).offlineAfterMs, 5000);
 });
 test("battery: predicts days left from a falling trend, none from a flat one", () => {

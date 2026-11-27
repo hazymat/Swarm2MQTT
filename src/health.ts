@@ -2,7 +2,7 @@
 import type {DeviceRow} from "./store.js";
 
 export const FALLBACK_OFFLINE = {router: 10 * 60e3, battery: 25 * 3600e3, stick: 10 * 60e3};
-export const MIN_SAMPLES = 8;
+export const MIN_SAMPLES = 8, LEARN_SPAN = 864e5, FLOOR_OFFLINE = {router: 10 * 60e3, battery: 2 * 3600e3, stick: 10 * 60e3};
 export interface CheckIns {learnt: boolean; samples: number; typicalMs?: number; offlineAfterMs: number; source: "learnt" | "fallback" | "override"; recentGaps: number[]}
 export interface Health {online: boolean; status: "ok" | "warn" | "bad" | "waiting" | "new"; reason?: string; fix?: string; cutOffBy?: string; checkIns: CheckIns; battery?: {percent: number; daysLeft?: number; warn: boolean}}
 
@@ -10,10 +10,11 @@ const quantile = (sorted: number[], fraction: number) => sorted[Math.min(sorted.
 export function checkIns(device: DeviceRow): CheckIns {
   const gaps = device.gaps ?? [], recentGaps = gaps.slice(-30);
   if (device.offline_after_override) return {learnt: gaps.length >= MIN_SAMPLES, samples: gaps.length, typicalMs: gaps.length ? quantile(gaps.slice().sort((first, second) => first - second), .5) : undefined, offlineAfterMs: device.offline_after_override, source: "override", recentGaps};
-  if (gaps.length < MIN_SAMPLES) return {learnt: false, samples: gaps.length, offlineAfterMs: FALLBACK_OFFLINE[device.kind], source: "fallback", recentGaps};
+  // a burst of messages (motion, a button held) isn't its check-in rhythm: learn only from a day of gaps or more
+  if (gaps.length < MIN_SAMPLES || gaps.reduce((total, gap) => total + gap, 0) < LEARN_SPAN) return {learnt: false, samples: gaps.length, offlineAfterMs: FALLBACK_OFFLINE[device.kind], source: "fallback", recentGaps};
   const sorted = gaps.slice().sort((first, second) => first - second), typical = quantile(sorted, .5), longest = quantile(sorted, .9);
-  // three usual check-ins missed, or 1.5x the longest normal gap, whichever is later
-  return {learnt: true, samples: gaps.length, typicalMs: typical, offlineAfterMs: Math.max(15e3, Math.round(Math.max(typical * 3, longest * 1.5))), source: "learnt", recentGaps};
+  // three usual check-ins missed, or 1.5x the longest normal gap, whichever is later, never sooner than its kind's floor
+  return {learnt: true, samples: gaps.length, typicalMs: typical, offlineAfterMs: Math.max(FLOOR_OFFLINE[device.kind], Math.round(Math.max(typical * 3, longest * 1.5))), source: "learnt", recentGaps};
 }
 // Remember the gap since the last message. Gaps under 2 s are bursts of one report, not check-ins.
 export function addGap(device: DeviceRow, now: number) {
