@@ -2,10 +2,11 @@
   import {live, act, call, toast} from "./api.svelte.js";
   import {view, save} from "./ui.svelte.js";
   import {dayClock} from "./util.js";
+  import {readBackupZip} from "./z2mzip.js";
   let snap = $derived(live.snap);
   let mqtt = $state(Object.assign({}, live.snap.mqtt.settings));
   let prefs = $state(Object.assign({}, live.snap.prefs));
-  let advanced = $state(false), stickPath = $state(""), stickType = $state("ember"), channel = $state(""), z2mFolder = $state(""), z2mPreview = $state(null);
+  let advanced = $state(false), stickPath = $state(""), stickType = $state("ember"), channel = $state(""), z2mFiles = $state(null), z2mPreview = $state(null);
   async function saveMqtt() {await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password, baseTopic: mqtt.baseTopic, heartbeatSeconds: Number(mqtt.heartbeatSeconds) || 0})}
   const savePrefs = () => act("prefs", {batteryLeadDays: Number(prefs.batteryLeadDays), batteryPercent: Number(prefs.batteryPercent), stats: prefs.stats, updateChannel: prefs.updateChannel});
   let statsPreview = $derived({version: snap.version, stick: snap.radio.stick, models: Array.from(new Set(snap.devices.map(device => device.model).filter(Boolean))).sort()});
@@ -70,8 +71,8 @@
     {#if advanced}
       <div class="kv"><span class="k">Stick address</span><input class="text" placeholder="tcp://192.168.1.20:6638 or /dev/ttyUSB0" bind:value={stickPath}><span class="seg"><button class:on={stickType === "ember"} onclick={() => stickType = "ember"}>Ember</button><button class:on={stickType === "zstack"} onclick={() => stickType = "zstack"}>Z-Stack</button></span><button class="pill ghost" disabled={!stickPath} onclick={() => act("stickPath", {path: stickPath, adapter: stickType})}>Use</button></div>
       <div class="kv"><span class="k">Channel</span><span class="unit"><input class="text num" type="number" min="11" max="26" placeholder={String(snap.radio.channel ?? "")} bind:value={channel}><button class="pill ghost" disabled={!Number(channel)} onclick={() => toast(`Changing to channel ${channel}. Some devices may need to rejoin.`, null, "info", () => act("channel", {channel: Number(channel)}).catch(() => {}))}>Change</button></span></div>
-      <div class="kv"><span class="k">Import from Zigbee2MQTT</span><input class="text" placeholder="Folder on this machine, e.g. /opt/zigbee2mqtt/data" bind:value={z2mFolder}><button class="pill ghost" disabled={!z2mFolder} onclick={() => call("z2mPreview", {folder: z2mFolder}).then(result => z2mPreview = result).catch(error => toast(error.message, null, "bad"))}>Look</button></div>
-      {#if z2mPreview}<div class="callout info"><span class="t">Found {z2mPreview.summary}. Stop Zigbee2MQTT first: only one can use the stick.</span><button class="pill" onclick={() => act("z2mImport", {folder: z2mFolder, keepBaseTopic: true}).then(() => z2mPreview = null)}>Import</button></div>{/if}
+      <div class="kv"><span class="k">Import from Zigbee2MQTT</span><label class="pill ghost">Pick its backup zip<input type="file" accept=".zip,application/zip" hidden onchange={event => readBackupZip(event.currentTarget.files[0]).then(files => {z2mFiles = files; return call("z2mPreview", {files})}).then(result => z2mPreview = result).catch(error => toast(error.message, null, "bad"))}></label><span class="muted">In Zigbee2MQTT: Settings &gt; Tools &gt; Request Zigbee2MQTT backup</span></div>
+      {#if z2mPreview}<div class="callout info"><span class="t">Found {z2mPreview.summary}. Stop Zigbee2MQTT first: only one can use the stick.</span><button class="pill" onclick={() => act("z2mImport", {files: z2mFiles, keepBaseTopic: true}).then(() => z2mPreview = null)}>Import</button></div>{/if}
     {/if}
   </section>
 </div>

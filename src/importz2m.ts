@@ -1,30 +1,43 @@
-// Read a Zigbee2MQTT data folder (never written to): network, devices, names, groups. Devices stay paired.
-import {copyFileSync, existsSync, readFileSync} from "node:fs";
+// Read Zigbee2MQTT's data (its backup zip, or its folder; never written to): network, devices, names, groups. Devices stay paired.
+import {existsSync, readFileSync, readdirSync, writeFileSync} from "node:fs";
 import {parse} from "yaml";
 import type {StickConfig} from "./radio/herdsman.js";
 import type {DeviceRow, GroupRow} from "./store.js";
 import type {MqttSettings} from "./mqtt.js";
 
+export type Z2mFiles = Record<string, string>; // file name → text, e.g. configuration.yaml, database.db, coordinator_backup.json, secret.yaml
 export interface Z2mImport {stick: StickConfig; devices: DeviceRow[]; groups: GroupRow[]; mqtt: Partial<MqttSettings>; summary: string}
 const hexToBytes = (hex: string) => (hex.match(/../g) ?? []).map(pair => parseInt(pair, 16));
+const WANTED = /^(configuration\.yaml|database\.db|coordinator_backup\.json|[\w.-]+\.yaml)$/;
 
-export function readZ2m(folder: string): Z2mImport {
+export function folderFiles(folder: string): Z2mFiles {
   folder = folder.replace(/\/+$/, "");
-  if (!existsSync(`${folder}/configuration.yaml`)) throw new Error(`No configuration.yaml in ${folder}. Point at Zigbee2MQTT's data folder.`);
-  if (!existsSync(`${folder}/database.db`)) throw new Error(`No database.db in ${folder}, so there are no paired devices to bring over.`);
-  const config: any = parse(readFileSync(`${folder}/configuration.yaml`, "utf8")) ?? {};
-  const backup: any = existsSync(`${folder}/coordinator_backup.json`) ? JSON.parse(readFileSync(`${folder}/coordinator_backup.json`, "utf8")) : {};
+  if (!existsSync(folder)) throw new Error(`There's no folder ${folder} on this machine.`);
+  const files: Z2mFiles = {};
+  for (const name of readdirSync(folder)) if (WANTED.test(name)) files[name] = readFileSync(`${folder}/${name}`, "utf8");
+  return files;
+}
+// zip entries can sit inside a folder; keep just the file names we need
+export function pickFiles(entries: Z2mFiles): Z2mFiles {const files: Z2mFiles = {}; for (const [path, text] of Object.entries(entries)) {const name = path.split("/").pop()!; if (WANTED.test(name) && !(name in files)) files[name] = text} return files}
+
+export function readZ2m(files: Z2mFiles): Z2mImport {
+  if (!files["configuration.yaml"]) throw new Error("That isn't a Zigbee2MQTT backup: there's no configuration.yaml in it.");
+  if (!files["database.db"]) throw new Error("There's no database.db in it, so there are no paired devices to bring over.");
+  const config: any = parse(files["configuration.yaml"]) ?? {};
+  // Zigbee2MQTT can keep values in other files: "!secret.yaml network_key"
+  const resolve = (value: any) => {if (typeof value !== "string" || !value.startsWith("!")) return value; const [file, key] = value.slice(1).split(/\s+/); const other = files[file.endsWith(".yaml") ? file : file + ".yaml"]; return other ? (parse(other) ?? {})[key] : undefined};
+  const backup: any = files["coordinator_backup.json"] ? JSON.parse(files["coordinator_backup.json"]) : {};
   const advanced = config.advanced ?? {}, serial = config.serial ?? {};
-  const networkKey = Array.isArray(advanced.network_key) ? advanced.network_key : backup.network_key?.key ? hexToBytes(backup.network_key.key) : undefined;
-  const panId = typeof advanced.pan_id === "number" ? advanced.pan_id : backup.pan_id ? parseInt(backup.pan_id, 16) : undefined;
-  const extendedPanId = Array.isArray(advanced.ext_pan_id) ? advanced.ext_pan_id : backup.extended_pan_id ? hexToBytes(backup.extended_pan_id) : [0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd];
-  const channel = advanced.channel ?? backup.channel ?? 11;
-  if (!networkKey || panId === undefined) throw new Error("Couldn't find the network key in Zigbee2MQTT's files. Start Zigbee2MQTT once so it writes them, then try again.");
+  const keyValue = resolve(advanced.network_key), panValue = resolve(advanced.pan_id), extValue = resolve(advanced.ext_pan_id);
+  const networkKey = Array.isArray(keyValue) ? keyValue : backup.network_key?.key ? hexToBytes(backup.network_key.key) : undefined;
+  const panId = typeof panValue === "number" ? panValue : backup.pan_id ? parseInt(backup.pan_id, 16) : undefined;
+  const extendedPanId = Array.isArray(extValue) ? extValue : backup.extended_pan_id ? hexToBytes(backup.extended_pan_id) : [0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd];
+  const channel = resolve(advanced.channel) ?? backup.channel ?? 11;
+  if (!networkKey || panId === undefined) throw new Error("Couldn't find the network key in Zigbee2MQTT's backup. Start Zigbee2MQTT once so it writes it, then make the backup again.");
   const adapter = serial.adapter === "zstack" ? "zstack" : serial.adapter === "ember" || serial.adapter === "ezsp" ? "ember" : undefined;
-  if (!adapter) throw new Error(`This stick type (${serial.adapter ?? "not set"}) isn't supported yet. Swarm2MQTT supports Ember and Z-Stack sticks.`);
-  const stick: StickConfig = {path: serial.port ?? "", adapter, baudRate: serial.baudrate, rtscts: serial.rtscts, panId, extendedPanId, channel, networkKey};
+  const stick: StickConfig = {path: resolve(serial.port) ?? "", adapter: adapter ?? "ember", baudRate: serial.baudrate, rtscts: serial.rtscts, panId, extendedPanId, channel, networkKey};
   const names: Record<string, any> = config.devices ?? {}, now = Date.now(), devices: DeviceRow[] = [];
-  for (const line of readFileSync(`${folder}/database.db`, "utf8").split("\n")) {
+  for (const line of files["database.db"].split("\n")) {
     if (!line.trim()) continue;
     let entry: any; try {entry = JSON.parse(line)} catch {continue}
     if (!entry.ieeeAddr || entry.type === "Coordinator" || entry.type === "Group") continue;
@@ -32,12 +45,11 @@ export function readZ2m(folder: string): Z2mImport {
     devices.push({ieee: entry.ieeeAddr, name, topic: name, format: "json", renames: {}, status: "accepted", kind: entry.type === "Router" ? "router" : "battery", model: entry.modelId, vendor: entry.manufName, supported: true, controls: [], hidden_controls: [], added_at: now, state: {}, gaps: []});
   }
   const groups: GroupRow[] = Object.entries(config.groups ?? {}).map(([id, group]: [string, any]) => ({id: Number(id), name: group.friendly_name ?? `Group ${id}`, topic: group.friendly_name ?? `group_${id}`, members: (group.devices ?? []).map((member: string) => {const ieee = member.split("/")[0]; return devices.find(device => device.name === ieee)?.ieee ?? ieee})}));
-  const mqttConfig = config.mqtt ?? {}, mqtt: Partial<MqttSettings> = {url: mqttConfig.server, username: mqttConfig.user, password: mqttConfig.password, baseTopic: mqttConfig.base_topic ?? "zigbee2mqtt"};
-  return {stick, devices, groups, mqtt, summary: `${devices.length} devices, ${groups.length} groups, channel ${channel}, ${adapter === "ember" ? "Ember" : "Z-Stack"} stick`};
+  const mqttConfig = config.mqtt ?? {}, mqtt: Partial<MqttSettings> = {url: resolve(mqttConfig.server), username: resolve(mqttConfig.user), password: resolve(mqttConfig.password), baseTopic: mqttConfig.base_topic ?? "zigbee2mqtt"};
+  return {stick, devices, groups, mqtt, summary: `${devices.length} ${devices.length === 1 ? "device" : "devices"}, ${groups.length} ${groups.length === 1 ? "group" : "groups"}, channel ${channel}`};
 }
-// Copy herdsman's own files into our data folder. The source is only read.
-export function copyZ2mFiles(folder: string, dataDir: string) {
-  folder = folder.replace(/\/+$/, "");
-  copyFileSync(`${folder}/database.db`, `${dataDir}/herdsman.db`);
-  if (existsSync(`${folder}/coordinator_backup.json`)) copyFileSync(`${folder}/coordinator_backup.json`, `${dataDir}/coordinator_backup.json`);
+// Write herdsman's own files into our data folder, so the stick carries on with the same network
+export function writeZ2mFiles(files: Z2mFiles, dataDir: string) {
+  writeFileSync(`${dataDir}/herdsman.db`, files["database.db"]);
+  if (files["coordinator_backup.json"]) writeFileSync(`${dataDir}/coordinator_backup.json`, files["coordinator_backup.json"]);
 }

@@ -5,7 +5,7 @@ import {extname, join, normalize} from "node:path";
 import {randomBytes} from "node:crypto";
 import {WebSocketServer, type WebSocket} from "ws";
 import type {App} from "./app.js";
-import {copyZ2mFiles, readZ2m} from "./importz2m.js";
+import {folderFiles, pickFiles, readZ2m, writeZ2mFiles, type Z2mFiles} from "./importz2m.js";
 import type {StickConfig} from "./radio/herdsman.js";
 
 const TYPES: Record<string, string> = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json", ".ico": "image/x-icon"};
@@ -21,7 +21,7 @@ export function startWeb(app: App, port: number, uiDir: string) {
     response.writeHead(200, {"content-type": TYPES[extname(file)] ?? "application/octet-stream", "cache-control": file.endsWith("index.html") ? "no-cache" : "max-age=31536000"});
     response.end(readFileSync(file));
   });
-  const sockets = new WebSocketServer({server, path: "/ws"});
+  const sockets = new WebSocketServer({server, path: "/ws", maxPayload: 64 * 1024 * 1024});
   const send = (socket: WebSocket, message: unknown) => {if (socket.readyState === 1) socket.send(JSON.stringify(message))};
   const all = (message: unknown) => {for (const socket of sockets.clients) send(socket, message)};
   app.on("changed", () => all({t: "snapshot", data: app.snapshot()}));
@@ -39,6 +39,8 @@ export function startWeb(app: App, port: number, uiDir: string) {
   server.listen(port, () => console.log(`Swarm2MQTT page on http://localhost:${port}`));
   return server;
 }
+
+const z2mFiles = (args: any): Z2mFiles => args.files ? pickFiles(args.files) : folderFiles(String(args.folder ?? ""));
 
 async function command(app: App, name: string, args: any): Promise<unknown> {
   switch (name) {
@@ -80,15 +82,18 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "backups": return app.backups();
     case "backupNow": return app.backup("by-hand");
     case "restore": return app.restore(args.name);
-    case "z2mPreview": {const result = readZ2m(args.folder); return {summary: result.summary, devices: result.devices.map(device => device.name), baseTopic: result.mqtt.baseTopic, hasMqtt: !!result.mqtt.url}}
+    // Zigbee2MQTT data comes as the files from its backup zip (unzipped in the browser), or a folder on this machine
+    case "z2mPreview": {const result = readZ2m(z2mFiles(args)); return {summary: result.summary, devices: result.devices.map(device => device.name), baseTopic: result.mqtt.baseTopic, hasMqtt: !!result.mqtt.url, path: result.stick.path}}
     case "z2mImport": {
-      const result = readZ2m(args.folder);
+      const files = z2mFiles(args), result = readZ2m(files);
+      // the stick typed in the wizard (or the one already set up) wins over Zigbee2MQTT's own setting
+      result.stick.path = args.path || app.stick?.path || result.stick.path; result.stick.adapter = args.adapter || app.stick?.adapter || result.stick.adapter;
       app.backup("before-import");
-      copyZ2mFiles(args.folder, app.dataDir);
+      writeZ2mFiles(files, app.dataDir);
       for (const device of result.devices) if (!app.store.device(device.ieee)) app.store.saveDevice(device);
       for (const group of result.groups) app.store.saveGroup(group);
       if (result.mqtt.url && !app.mqttSettings.url) app.applySetting("mqtt", Object.assign({}, app.store.get("mqtt", {}), result.mqtt, {baseTopic: args.keepBaseTopic ? result.mqtt.baseTopic : app.mqttSettings.baseTopic}));
-      app.log("info", `Imported from Zigbee2MQTT: ${result.summary}. Its folder wasn't changed.`);
+      app.log("info", `Brought over from Zigbee2MQTT: ${result.summary}. Its own files weren't changed.`);
       app.applySetting("stick", result.stick);
       return result.summary;
     }

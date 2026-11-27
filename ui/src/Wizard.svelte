@@ -1,12 +1,23 @@
 <script>
   import {live, act, call, toast} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
-  let step = $state(1), path = $state(""), adapter = $state("ember"), from = $state(null), folder = $state(""), preview = $state(null), busy = $state(false);
+  import {readBackupZip} from "./z2mzip.js";
+  let step = $state(1), path = $state(""), adapter = $state("ember"), from = $state(null), files = $state(null), fileName = $state(""), preview = $state(null), busy = $state(false), dragging = $state(false);
   let mqtt = $state({url: "", username: "", password: ""});
   view.wizard = true;
-  async function useZ2m() {busy = true; try {preview = await call("z2mPreview", {folder})} catch (error) {toast(error.message, null, "bad")} busy = false}
-  async function importZ2m() {busy = true; try {await act("z2mImport", {folder, keepBaseTopic: true}); step = 3} catch {} busy = false}
-  async function newNetwork() {busy = true; try {await act("newNetwork", {path, adapter}); step = 3} catch {} busy = false}
+  const HINTS = {ember: {likely: "tcp://<IP address>:6638", likelyWhere: "for a stick on your network (SMLIGHT and similar)", other: "/dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "/dev/ttyUSB0", likelyWhere: "for a stick plugged into this machine (Sonoff P, CC2652)", other: "tcp://<IP address>:6638", otherWhere: "on your network"}};
+  let hint = $derived(HINTS[adapter]);
+  async function pickZip(file) {
+    if (!file) return; busy = true; preview = null; fileName = file.name;
+    try {files = await readBackupZip(file); preview = await call("z2mPreview", {files})} catch (error) {files = null; toast(error.message, null, "bad")}
+    busy = false;
+  }
+  async function importZ2m() {busy = true; try {await act("z2mImport", {files, path, adapter, keepBaseTopic: true}); goMqtt()} catch {} busy = false}
+  async function newNetwork() {busy = true; try {await act("newNetwork", {path, adapter}); goMqtt()} catch {} busy = false}
+  function goMqtt() {step = 3}
+  // an import may bring Zigbee2MQTT's MQTT server: fill it in once it arrives
+  let prefilled = false;
+  $effect(() => {const settings = live.snap.mqtt.settings; if (step === 3 && !prefilled && settings?.url) {prefilled = true; mqtt = {url: settings.url, username: settings.username ?? "", password: settings.password ?? ""}}});
   async function saveMqtt() {await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password}).catch(() => {})}
   let snap = $derived(live.snap);
 </script>
@@ -16,22 +27,31 @@
   {#if step === 1}
     <section class="card">
       <h2>Where is your Zigbee stick?</h2>
-      <input class="text" placeholder="/dev/ttyUSB0, or tcp://192.168.1.20:6638 for a network stick" bind:value={path}>
       <div class="seg"><button class:on={adapter === "ember"} onclick={() => adapter = "ember"}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => adapter = "zstack"}>Z-Stack (Sonoff P, CC2652)</button></div>
-      <button class="pill primary" disabled={!path} onclick={() => step = 2}>Next</button>
+      <input class="text" placeholder={hint.likely} bind:value={path}>
+      <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: <code>{hint.likely}</code><br>Or, {hint.otherWhere}: <code>{hint.other}</code></span></div>
+      <button class="pill primary" disabled={!path || path.includes("<")} onclick={() => step = 2}>Next</button>
     </section>
   {:else if step === 2}
     <section class="card">
       <h2>Coming from Zigbee2MQTT?</h2>
       <div class="choice">
-        <button class="option" class:on={from === "z2m"} onclick={() => from = "z2m"}><b>Yes</b><span class="muted">Bring the network, devices, names and groups over. Nothing needs pairing again.</span></button>
-        <button class="option" class:on={from === "new"} onclick={() => from = "new"}><b>No</b><span class="muted">Start a new network. Its keys are made for you and never shown.</span></button>
+        <button class="option" class:on={from === "z2m"} onclick={() => from = "z2m"}><b>Yes, bring my network over</b><span class="muted">Same network, same devices, names and groups. Nothing is paired again.</span><span class="muted">You can switch back any time: stop one, start the other. Zigbee2MQTT's own files are never changed.</span></button>
+        <button class="option" class:on={from === "new"} onclick={() => from = "new"}><b>No, start a new network</b><span class="muted">Every device must be paired again, one by one.</span><span class="muted">A device belongs to one network at a time, so pairing it here takes it off the old one.</span></button>
       </div>
       {#if from === "z2m"}
-        <input class="text" placeholder="Zigbee2MQTT data folder on this machine, e.g. /opt/zigbee2mqtt/data" bind:value={folder}>
-        {#if preview}<div class="callout info"><span class="t">Found {preview.summary}. Stop Zigbee2MQTT before importing: only one can use the stick. Its folder is only read, so going back always works.</span></div>
-          <button class="pill primary" disabled={busy} onclick={importZ2m}>Import</button>
-        {:else}<button class="pill primary" disabled={!folder || busy} onclick={useZ2m}>Look in this folder</button>{/if}
+        <ol class="howto">
+          <li>Open Zigbee2MQTT's web page. If you've stopped it, start it again for a minute.</li>
+          <li>Go to <b>Settings &gt; Tools &gt; Request Zigbee2MQTT backup</b>. A zip downloads.</li>
+          <li>Stop Zigbee2MQTT. Only one of them can use the stick.</li>
+          <li>Drop the zip here.</li>
+        </ol>
+        <label class="drop" class:dragging ondragover={event => {event.preventDefault(); dragging = true}} ondragleave={() => dragging = false} ondrop={event => {event.preventDefault(); dragging = false; pickZip(event.dataTransfer.files[0])}}>
+          <input type="file" accept=".zip,application/zip" hidden onchange={event => pickZip(event.currentTarget.files[0])}>
+          {#if busy && !preview}Reading {fileName}…{:else if preview}✓ {fileName}{:else}Drop the zip here, or click to pick it{/if}
+        </label>
+        {#if preview}<div class="callout info"><span class="t">Found {preview.summary}{preview.hasMqtt ? ", and the MQTT server" : ""}. The stick from the first step is used: <code>{path}</code></span></div>
+          <button class="pill primary" disabled={busy} onclick={importZ2m}>Bring it over</button>{/if}
       {:else if from === "new"}<button class="pill primary" disabled={busy} onclick={newNetwork}>Make the network</button>{/if}
       <button class="link" onclick={() => step = 1}>‹ Back</button>
     </section>
@@ -59,5 +79,9 @@
   .two,.row{display:flex;gap:8px}
   .pill{align-self:flex-start}
   .link{color:var(--accent);align-self:flex-start}
+  .hint code,.callout code{font-family:ui-monospace,monospace;font-size:13px;white-space:nowrap}
+  .howto{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:14.5px}
+  .drop{display:flex;align-items:center;justify-content:center;min-height:84px;padding:12px;border-radius:14px;border:1.5px dashed var(--glass-border);cursor:pointer;color:var(--muted);text-align:center}
+  .drop.dragging,.drop:hover{border-color:var(--accent);color:var(--text)}
   @media (max-width:700px){.choice{grid-template-columns:1fr}}
 </style>

@@ -7,7 +7,7 @@ import mqtt from "mqtt";
 import {Aedes} from "aedes";
 import {checkIns, batteryDaysLeft, health, FALLBACK_OFFLINE} from "../health.js";
 import {payloadsFor} from "../mqtt.js";
-import {readZ2m} from "../importz2m.js";
+import {readZ2m, folderFiles, pickFiles} from "../importz2m.js";
 import {translate} from "../errors.js";
 import {App} from "../app.js";
 import type {DeviceRow} from "../store.js";
@@ -46,10 +46,12 @@ test("errors: raw herdsman text becomes plain words", () => {
 });
 test("Zigbee2MQTT import reads network, names and groups without changing the folder", () => {
   const folder = mkdtempSync(`${tmpdir()}/z2m-`);
-  writeFileSync(`${folder}/configuration.yaml`, "mqtt:\n  base_topic: zigbee2mqtt\n  server: mqtt://broker:1883\nserial:\n  port: tcp://stick:6638\n  adapter: ember\nadvanced:\n  network_key: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]\n  pan_id: 6754\n  channel: 15\ndevices:\n  '0xa1':\n    friendly_name: Kitchen sensor\ngroups:\n  '1':\n    friendly_name: Lights\n    devices: [Kitchen sensor]\n");
+  writeFileSync(`${folder}/configuration.yaml`, "mqtt:\n  base_topic: zigbee2mqtt\n  server: mqtt://broker:1883\nserial:\n  port: tcp://stick:6638\n  adapter: ember\nadvanced:\n  network_key: '!secret.yaml network_key'\n  pan_id: 6754\n  channel: 15\ndevices:\n  '0xa1':\n    friendly_name: Kitchen sensor\ngroups:\n  '1':\n    friendly_name: Lights\n    devices: [Kitchen sensor]\n");
+  writeFileSync(`${folder}/secret.yaml`, "network_key: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]\n");
   writeFileSync(`${folder}/database.db`, '{"id":1,"type":"Coordinator","ieeeAddr":"0x00"}\n{"id":2,"type":"EndDevice","ieeeAddr":"0xa1","modelId":"TS0202"}\n');
-  const result = readZ2m(folder);
-  assert.equal(result.stick.channel, 15); assert.equal(result.stick.adapter, "ember"); assert.equal(result.stick.panId, 6754);
+  const result = readZ2m(folderFiles(folder));
+  assert.deepEqual(Object.keys(pickFiles({"data/configuration.yaml": "a", "data/log/x.txt": "b"})), ["configuration.yaml"]);
+  assert.equal(result.stick.channel, 15); assert.equal(result.stick.adapter, "ember"); assert.equal(result.stick.panId, 6754); assert.equal(result.stick.networkKey.length, 16);
   assert.deepEqual(result.devices.map(device => [device.name, device.topic, device.kind]), [["Kitchen sensor", "Kitchen sensor", "battery"]]);
   assert.deepEqual(result.groups[0].members, ["0xa1"]);
   assert.equal(result.mqtt.baseTopic, "zigbee2mqtt");
