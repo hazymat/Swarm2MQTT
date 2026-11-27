@@ -71,7 +71,7 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 | # | Headline | The complaint | Done when |
 |---|---|---|---|
 | P30 | **Every device Zigbee2MQTT supports** | "Supports every device under the sun" is Z2M's real strength | Uses the same device library (§8), updated with each of its releases. |
-| P31 | **Switch from Zigbee2MQTT without re-pairing** *(added)* | — | Import reads Z2M's data folder and keeps the same network, so every device stays paired. |
+| P31 | **Switch from Zigbee2MQTT without re-pairing** *(added)* | — | Import reads Z2M's backup zip (Settings > Tools > Request Zigbee2MQTT backup) and keeps the same network, so every device stays paired. |
 | P32 | **You never need to learn Zigbee** | "Zero desire to get my hands dirty" | Mat can install, migrate and run it without reading Zigbee documentation. |
 
 ---
@@ -122,7 +122,7 @@ Applied here:
 
 ### 3.1 Setup wizard (first run, or Settings > Start again)
 1. **Your stick.** Lists plugged-in sticks by name ("Sonoff ZBDongle-E"). One click. "Mine isn't listed" shows unplug/replug hint.
-2. **Coming from Zigbee2MQTT?** Yes: point at its folder, we import network, devices, names and groups (P31). No: create a new network (keys generated, never shown).
+2. **Coming from Zigbee2MQTT?** Yes: drop its backup zip, we import network, devices, names and groups (P31). No: create a new network (keys generated, never shown).
 3. **MQTT.** Server address, user, password, with a live "Connected" tick. "Skip, I don't use MQTT" allowed.
 4. **Done.** Lands on Home with "Add devices" glowing if the network is empty.
 
@@ -246,7 +246,7 @@ Home Assistant discovery (Node-RED and plain MQTT only), a login for the web pag
 ## 10. Switching over
 
 No test network: we cut over on Mat's existing stick.
-1. Swarm2MQTT imports Z2M's data folder (network key, devices, names) while Z2M is still running. Nothing touches the stick yet.
+1. Request a backup zip from Z2M's web page, then stop Z2M. Swarm2MQTT imports the zip (network key, devices, names).
 2. Stop Z2M. Start Swarm2MQTT on the same stick. Devices stay paired.
 3. Either set the base topic to `zigbee2mqtt` so nothing else changes, or keep `swarm2mqtt` and repoint flows later. The switching-over page lists every topic that differs.
 4. If anything is wrong: stop Swarm2MQTT, start Z2M. Its folder is never written to, so going back always works.
@@ -295,7 +295,6 @@ Not yet:
 - Channel scan: herdsman has no energy scan for every stick, so a new network uses channel 20 unless a scan result exists.
 - Your changes: undo and redo go back in order; undoing one older entry on its own comes later.
 - Dragging rows into your own order (the map nodes and the phone bar already drag).
-- Zigbee2MQTT import reads a folder on the same machine; uploading it from the browser comes later.
 
 ## 14. Open questions
 
