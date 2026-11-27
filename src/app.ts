@@ -80,7 +80,7 @@ export class App extends EventEmitter {
     radio.on("interview", (ieee, status) => this.onInterview(ieee, status));
     radio.on("left", ieee => {const device = this.store.device(ieee); if (device) this.log("warn", `${device.name} left the network.`, ieee)});
     radio.on("permitJoin", seconds => {this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()});
-    radio.start().then(() => {this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(5000)}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
+    radio.start().then(() => {if (this.stick?.formNew) this.store.put("stick", Object.assign({}, this.stick, {formNew: undefined})); /* formed: from now on it never leaves its network by itself */ this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(5000)}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
   }
   retryRadio() {
     clearTimeout(this.retryTimer); clearTimeout(this.scanTimer);

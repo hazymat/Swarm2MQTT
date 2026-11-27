@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 16, text: "Safer move from Zigbee2MQTT: the network is taken exactly as Zigbee2MQTT runs it and checked against what it reports live; an old coordinator backup from another adapter is left out. Swarm2MQTT never makes an adapter leave its network unless you asked for a new one, and always lets go of the adapter after a failed start."},
   {id: 15, text: "While the network isn't running, Home shows a live checklist: MQTT, Zigbee2MQTT stopped, the adapter (with the reason it can't connect and what to try) and what the adapter said. Setup now waits on a Start step until the network is really running."},
   {id: 14, text: "Errors say what happened in plain words, never \"Something went wrong\". Connecting to the adapter is blue, not red; tap it to see what's going on."},
   {id: 13, text: "Setup warns about Zigbee2MQTT's old logs, which can stop it making a backup, and gives you the command to clear them. The adapter step is now a guided 1, 2, 3."},

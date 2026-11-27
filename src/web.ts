@@ -43,7 +43,7 @@ export function startWeb(app: App, port: number, uiDir: string) {
   return server;
 }
 
-const z2mSummary = (result: ReturnType<typeof readZ2m>) => ({summary: result.summary, baseTopic: result.mqtt.baseTopic, channel: result.stick.channel, adapterPath: result.stick.path, adapterType: result.stick.adapter, devices: result.devices.map(device => ({ieee: device.ieee, name: device.name, model: device.model, kind: device.kind})), groups: result.groups.map(group => group.name)});
+const z2mSummary = (result: ReturnType<typeof readZ2m>) => ({summary: result.note ? `${result.summary}. ${result.note}` : result.summary, baseTopic: result.mqtt.baseTopic, channel: result.stick.channel, adapterPath: result.stick.path, adapterType: result.stick.adapter, devices: result.devices.map(device => ({ieee: device.ieee, name: device.name, model: device.model, kind: device.kind})), groups: result.groups.map(group => group.name)});
 const z2mFiles = (args: any): Z2mFiles => args.files ? pickFiles(args.files) : folderFiles(String(args.folder ?? ""));
 
 async function command(app: App, name: string, args: any): Promise<unknown> {
@@ -117,7 +117,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
       // new network: fresh keys (never shown) and a channel between the usual WiFi channels
       const scan = app.radio ? await app.radio.scanChannels().catch(() => ({})) : {};
       const measured = QUIET_CHANNELS.filter(channel => (scan as any)[channel] !== undefined).sort((first, second) => (scan as any)[first] - (scan as any)[second]);
-      const stick: StickConfig = {path: args.path, adapter: args.adapter, panId: randomBytes(2).readUInt16BE() % 0xfff0 + 1, extendedPanId: Array.from(randomBytes(8)), channel: args.channel ?? measured[0] ?? 20, networkKey: Array.from(randomBytes(16))};
+      const stick: StickConfig = {path: args.path, adapter: args.adapter, panId: randomBytes(2).readUInt16BE() % 0xfff0 + 1, extendedPanId: Array.from(randomBytes(8)), channel: args.channel ?? measured[0] ?? 20, networkKey: Array.from(randomBytes(16)), formNew: true};
       app.backup("before-new-network");
       app.applySetting("stick", stick);
       app.log("info", `New Zigbee network made on channel ${stick.channel}.`);

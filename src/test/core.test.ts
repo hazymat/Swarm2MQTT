@@ -57,6 +57,21 @@ test("Zigbee2MQTT import reads network, names and groups without changing the fo
   assert.equal(result.mqtt.baseTopic, "zigbee2mqtt");
 });
 
+test("Zigbee2MQTT import: network as Zigbee2MQTT runs it; an old backup of another network is left out; a live mismatch stops it", () => {
+  const config = "serial:\n  port: tcp://stick:6638\n  adapter: ember\nadvanced:\n  network_key: [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]\n  pan_id: 6754\n";
+  const database = '{"id":1,"type":"Coordinator","ieeeAddr":"0x00"}\n';
+  const staleBackup = JSON.stringify({pan_id: "1a62", extended_pan_id: "00124b00258cc1a8", network_key: {key: "0102"}});
+  const files: Record<string, string> = {"data/configuration.yaml": config, "data/database.db": database, "data/old/coordinator_backup.json": "{}", "data/coordinator_backup.json": staleBackup};
+  const picked = pickFiles(files);
+  assert.equal(picked["coordinator_backup.json"], staleBackup); // the top-level one, not the copy in a subfolder
+  const result = readZ2m(picked);
+  assert.deepEqual(result.stick.extendedPanId, [0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd, 0xdd]); assert.equal(result.stick.channel, 11);
+  assert.equal(picked["coordinator_backup.json"], undefined); assert.match(result.note ?? "", /another network/);
+  assert.throws(() => readZ2m({"configuration.yaml": config, "database.db": database, "bridge-info.json": JSON.stringify({network: {pan_id: 6754, channel: 15, extended_pan_id: "0xdddddddddddddddd"}})}), /don't match the network it's running/);
+  assert.doesNotThrow(() => readZ2m({"configuration.yaml": config, "database.db": database, "bridge-info.json": JSON.stringify({network: {pan_id: 6754, channel: 11, extended_pan_id: "0xdddddddddddddddd"}})}));
+  assert.match(translate("Error: ADAPTER_HOLDS_OTHER_NETWORK pan 1 channel 11").text, /stopped rather than wipe it/);
+});
+
 test("end to end with the simulator: MQTT out and in, holding area, undo, heartbeat", {timeout: 60e3}, async () => {
   const broker = await Aedes.createBroker(), server = createServer(broker.handle);
   await new Promise<void>(resolve => server.listen(0, resolve));

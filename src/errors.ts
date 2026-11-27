@@ -1,6 +1,7 @@
 // Error translation (§5): every message names the thing, says what happened, offers one action. Raw text stays in "Technical details".
 interface Entry {match: RegExp; text: (name: string) => string; fix?: string}
 const TABLE: Entry[] = [
+  {match: /ADAPTER_HOLDS_OTHER_NETWORK/, text: () => "The adapter holds a different Zigbee network from the one set up here. Swarm2MQTT stopped rather than wipe it. Bring your network over from Zigbee2MQTT again (its settings may have changed), or start a new network in setup.", fix: "stick-settings"},
   {match: /HOST_FATAL_ERROR|Failed to start EZSP|Waiting for RSTACK|didn't finish starting within/i, text: () => "The adapter didn't answer Swarm2MQTT's hello. Usually another program (Zigbee2MQTT, ZHA) is still connected to it: only one can use it at a time. Stop that program, or restart the adapter from its web page.", fix: "adapter-busy"},
   {match: /ECONNRESET|socket hang up|EPIPE|Socket closed/i, text: () => "The adapter closed the connection. Usually another program (Zigbee2MQTT, ZHA) is connected to it: only one can use it at a time.", fix: "adapter-busy"},
   {match: /protocol version|EZSP.*not supported|unsupported.*firmware|firmware.*too old/i, text: () => "The adapter's Zigbee firmware is too old for Swarm2MQTT. Update it (SLZB adapters: from its web page), then try again.", fix: "stick-settings"},

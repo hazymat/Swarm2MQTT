@@ -1,9 +1,10 @@
 // Real adapter, through zigbee-herdsman + zigbee-herdsman-converters (both MIT, by Koen Kanters and the Zigbee2MQTT community)
 import {Controller, setLogger, setOtaConfiguration} from "zigbee-herdsman";
 import * as zhc from "zigbee-herdsman-converters";
+import {createRequire} from "node:module";
 import {Radio, type Control, type Kind, type Link, type RadioDevice} from "./radio.js";
 
-export interface StickConfig {path: string; adapter: "ember" | "zstack"; baudRate?: number; rtscts?: boolean; panId: number; extendedPanId: number[]; channel: number; networkKey: number[]}
+export interface StickConfig {path: string; adapter: "ember" | "zstack"; baudRate?: number; rtscts?: boolean; panId: number; extendedPanId: number[]; channel: number; networkKey: number[]; formNew?: boolean}
 const OTA_SETTINGS = {requestTimeout: 150000, responseDelay: 250, baseSize: 50};
 
 // Flatten the library's exposes (lights, switches, composites) into simple controls
@@ -25,6 +26,17 @@ let detailed = true;
 const keep = (level: string, message: string | (() => string), namespace: string) => {const line = `${new Date().toISOString().slice(11, 19)} ${level} ${namespace.replace(/^zh:/, "")}: ${typeof message === "function" ? message() : message}`, same = (text?: string) => text?.slice(9).replace(/\d+/g, "#"); if (same(adapterLog[adapterLog.length - 1]) === same(line)) adapterLog[adapterLog.length - 1] = line; else adapterLog.push(line); if (adapterLog.length > 200) adapterLog.splice(0, adapterLog.length - 200)};
 setLogger({debug: (message, namespace) => {if (detailed) keep("debug", message, namespace)}, info: (message, namespace) => keep("info", message, namespace), warning: (message, namespace) => keep("warn", message, namespace), error: (message, namespace) => keep("error", message, namespace)});
 const START_SECONDS = 90;
+
+// The library makes an adapter leave whatever network it holds when it isn't the one in our settings, then forms ours. That wipes someone's working network
+// if the settings are wrong (a stale backup, a typo). So leaving is only allowed when the person asked for a new network; otherwise starting stops with the reason.
+let allowLeave = false;
+const {Ezsp} = createRequire(import.meta.url)("zigbee-herdsman/dist/adapter/ember/ezsp/ezsp.js");
+const ezspLeave = Ezsp.prototype.ezspLeaveNetwork;
+Ezsp.prototype.ezspLeaveNetwork = function (...args: unknown[]) {
+  if (allowLeave) return ezspLeave.apply(this, args);
+  const held = adapterLog.slice().reverse().find(line => line.includes("Current adapter network"))?.match(/"panId":(\d+).*?"radioChannel":(\d+)/);
+  throw new Error(`ADAPTER_HOLDS_OTHER_NETWORK${held ? ` pan ${held[1]} channel ${held[2]}` : ""}`);
+};
 
 export class HerdsmanRadio extends Radio {
   controller?: Controller;
@@ -54,7 +66,7 @@ export class HerdsmanRadio extends Radio {
     });
     controller.on("deviceAnnounce", data => this.libraryEvent("deviceAnnounce", data.device));
     controller.on("message", data => this.onMessage(data));
-    detailed = true;
+    detailed = true; allowLeave = !!this.config.formNew;
     let timer: NodeJS.Timeout | undefined;
     try {await Promise.race([controller.start(), new Promise((_, reject) => {timer = setTimeout(() => reject(new Error(`The adapter didn't finish starting within ${START_SECONDS} seconds.`)), START_SECONDS * 1000)})])}
     finally {clearTimeout(timer)}
@@ -63,7 +75,13 @@ export class HerdsmanRadio extends Radio {
     const parameters = await controller.getNetworkParameters(), version = await controller.getCoordinatorVersion();
     this.emit("status", {up: true, stick: version.type, channel: parameters.channel, panId: parameters.panID});
   }
-  async stop() {try {await this.controller?.stop()} catch {}; this.controller = undefined}
+  // always let go of the adapter, even after a failed start: a network adapter takes one connection, so one left open blocks every retry
+  async stop() {
+    const controller: any = this.controller; this.controller = undefined; if (!controller) return;
+    const within = (promise: Promise<unknown>) => Promise.race([promise.catch(() => {}), new Promise(resolve => setTimeout(resolve, 10000))]);
+    await within(controller.stop());
+    await within(Promise.resolve().then(() => controller.adapter?.stop?.()));
+  }
 
   async resolve(device: any) {
     try {this.definitions.set(device.ieeeAddr, await zhc.findByDevice(device, true))} catch {this.definitions.delete(device.ieeeAddr)}
