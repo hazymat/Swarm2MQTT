@@ -87,7 +87,7 @@ export class App extends EventEmitter {
     radio.on("joinFailed", (ieee, error) => this.joinWatch.fail(ieee, this.joinWatch.reports.get(ieee)?.failing?.step ?? "identified", error ?? "no answer"));
     radio.on("signal", (ieee, rssi, lqi) => {this.joinWatch.heard(ieee, rssi, lqi); if (rssi !== undefined) this.signals.set(ieee, {rssi, lqi, at: Date.now()})});
     radio.on("delivery", (ieee, ok) => this.joinWatch.delivered(ieee, ok));
-    radio.on("joinInfo", (ieee, info) => {if (this.joinWatch.watching(ieee) || this.joinEndsAt > Date.now()) this.joinWatch.set(ieee, info)});
+    radio.on("joinInfo", (ieee, info) => {this.moved(ieee, info.parent); if (this.joinWatch.watching(ieee) || this.joinEndsAt > Date.now()) this.joinWatch.set(ieee, info)});
     radio.on("stray", ieee => {this.strays.add(ieee); this.scanSoon = true});
     radio.on("joined", ieee => this.onJoined(ieee));
     radio.on("interview", (ieee, status) => this.onInterview(ieee, status));
@@ -295,6 +295,20 @@ export class App extends EventEmitter {
     this.changed();
     return this.pushUndo(reject ? `Rejected ${device.name}` : `Removed ${device.name}`, {op: "remove", ieee}, {op: "rejoin", row: device});
   }
+  // a battery device picks its own parent: open joining on the chosen plug only, ask it to leave and come straight back, and guide a button press
+  moving?: {ieee: string; via: string; until: number};
+  async moveTo(ieee: string, via: string) {
+    const device = this.need(ieee), plug = this.need(via);
+    await this.join(120, via); this.moving = {ieee, via, until: Date.now() + 120e3};
+    this.requireRadio().rejoin(ieee).catch(() => {}); // only heard if it's awake; the button press covers the rest
+    this.log("info", `Moving ${device.name} to ${plug.name}: joining is open on ${plug.name} only for 2 minutes.`, ieee); this.changed();
+  }
+  moved(ieee: string, parent?: string) {
+    const move = this.moving; if (!move || move.ieee !== ieee || !parent) return;
+    const device = this.store.device(ieee), name = (who: string) => this.store.device(who)?.name ?? "the adapter";
+    this.moving = undefined; this.join(0).catch(() => {}); this.scanSoon = true; this.scheduleScan(15e3);
+    this.log(parent === move.via ? "info" : "warn", parent === move.via ? `${device?.name} now talks through ${name(parent)}.` : `${device?.name} came back through ${name(parent)}, not ${name(move.via)}. Try again with it close to ${name(move.via)}.`, ieee); this.changed();
+  }
   async join(seconds: number, via?: string) {await this.requireRadio().permitJoin(seconds, via || undefined); this.joinVia = seconds ? via : undefined; this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()}
 
   // groups and scenes
@@ -445,7 +459,7 @@ export class App extends EventEmitter {
     const devices = this.store.devices(), parents = this.parents(), all = new Map(devices.map(device => [device.ieee, device])), latest = this.store.linksAt();
     return {
       version: VERSION, whatsNew: this.whatsNew, update: this.update, sim: this.sim, radio: this.radioStatus.up || this.sim ? this.radioStatus : Object.assign({}, this.radioStatus, {log: adapterLog.slice(-40)}), mqtt: {connected: this.mqtt.connected, error: this.mqtt.error, settings: Object.assign({}, this.mqttSettings, {password: this.mqttSettings.password ? "••••" : ""})}, prefs: this.prefs, stickSet: !!this.stick || this.sim, stick: this.stick ? {path: this.stick.path, adapter: this.stick.adapter} : null,
-      join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia},
+      join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia, moving: this.moving && this.moving.until > Date.now() ? this.moving : undefined},
       // how each recent join went, with the verdict in plain words (names filled in)
       joinReports: Array.from(this.joinWatch.reports.values()).map(report => Object.assign({}, report, {verdict: diagnose(report, ieee => ieee ? this.store.device(ieee)?.name ?? ieee : "the adapter")})),
       devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, firmwareProgress: this.firmwareProgress.get(device.ieee)})),

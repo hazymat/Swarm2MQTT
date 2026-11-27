@@ -50,6 +50,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
   switch (name) {
     case "rename": return app.rename(args.ieee, args.name);
     case "note": return app.setNote(args.ieee, args.note);
+    case "moveTo": return app.moveTo(args.ieee, args.via);
     case "topic": return app.setTopic(args.ieee, args.topic);
     case "format": return app.setFormat(args.ieee, args.format);
     case "renames": return app.setRenames(args.ieee, args.renames);

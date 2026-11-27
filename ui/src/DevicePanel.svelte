@@ -33,6 +33,9 @@
   // editing
   let editingName = $state(false), nameDraft = $state(""), topicDraft = $state(""), editingTopic = $state(false), overrideDraft = $state("");
   async function saveName() {if (!editingName) return; editingName = false; if (nameDraft.trim() && nameDraft !== device.name) await act("rename", {ieee: device.ieee, name: nameDraft}).catch(() => {})}
+  // battery devices choose their own plug; Move it to… steers that choice
+  let plugs = $derived(snap.devices.filter(other => other.kind === "router" && other.status === "accepted" && other.health.online && other.ieee !== device.parent));
+  let nameOfIeee = ieee => !ieee || ieee === snap.stickIeee ? "the adapter" : snap.devices.find(other => other.ieee === ieee)?.name ?? ieee;
   let editingNote = $state(false), noteDraft = $state("");
   async function saveNote() {if (!editingNote) return; editingNote = false; if (noteDraft.trim() !== (device.note ?? "")) await act("note", {ieee: device.ieee, note: noteDraft}).catch(() => {})}
   async function saveTopic() {if (!editingTopic) return; editingTopic = false; if (topicDraft.trim() && topicDraft !== device.topic) await act("topic", {ieee: device.ieee, topic: topicDraft}).catch(() => {})}
@@ -80,6 +83,9 @@
       <ol><li>Remove it: it's taken off the network and out of the adapter.</li><li>Reset it: usually hold its button for 5 to 10 seconds until it blinks.</li><li>It joins again from scratch, step by step.</li></ol>
       <div class="acts"><button class="pill primary" onclick={() => {const ieee = device.ieee, name = device.name; view.open = null; toast(`Starting ${name} again`, null, "info", () => act("startAgain", {ieee}).then(() => toast("Now reset it: hold its button until it blinks", null)).catch(() => {}))}}>Remove and add again</button>{#if !joinReport?.verdict}<button class="pill ghost" onclick={() => act("joinAgain", {ieee: device.ieee}).catch(() => {})}>Just ask it again</button>{/if}</div>
     </div>{/if}
+  {#if device.kind !== "router" && device.status === "accepted" && device.model && plugs.length}
+    <div class="kv move"><span class="k">Talks through</span><span>{nameOfIeee(device.parent)}</span><select class="text" value="" onchange={event => {const via = event.currentTarget.value; event.currentTarget.value = ""; if (via) act("moveTo", {ieee: device.ieee, via}).catch(() => {})}}><option value="">Move it to…</option>{#each plugs as plug (plug.ieee)}<option value={plug.ieee}>{plug.name}</option>{/each}</select></div>
+  {/if}
   {#if !device.supported && device.controls.length}<div class="hint"><span class="t">We don't know this exact model, so these controls are our best guess from what it reports. Remove any that are wrong, or add others below.</span></div>{/if}
 
   <div class="grid2">
@@ -202,6 +208,7 @@
   .name :global(.icon){opacity:.5}
   .text.big{font-size:19px}
   .desc{font-size:14px;text-align:left;display:inline-flex;align-items:center;gap:6px;color:var(--text)}.desc.muted{color:var(--muted)}
+  .move{gap:10px}.move select{max-width:200px}
   .startagain{padding:12px 14px;display:flex;flex-direction:column;gap:6px}.startagain ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.startagain .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .v{display:flex;align-items:center;gap:8px}

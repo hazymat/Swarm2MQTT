@@ -35,7 +35,7 @@ const START_SECONDS = 90;
 // The library makes an adapter leave whatever network it holds when it isn't the one in our settings, then forms ours. That wipes someone's working network
 // if the settings are wrong (a stale backup, a typo). So leaving is only allowed when the person asked for a new network; otherwise starting stops with the reason.
 let allowLeave = false;
-const {Ezsp} = createRequire(import.meta.url)("zigbee-herdsman/dist/adapter/ember/ezsp/ezsp.js"), {Device: LibraryDevice} = createRequire(import.meta.url)("zigbee-herdsman/dist/controller/model/device.js");
+const {Ezsp} = createRequire(import.meta.url)("zigbee-herdsman/dist/adapter/ember/ezsp/ezsp.js"), {Device: LibraryDevice} = createRequire(import.meta.url)("zigbee-herdsman/dist/controller/model/device.js"), Zdo = createRequire(import.meta.url)("zigbee-herdsman/dist/zspec/zdo/index.js");
 const ezspLeave = Ezsp.prototype.ezspLeaveNetwork;
 Ezsp.prototype.ezspLeaveNetwork = function (...args: unknown[]) {
   if (allowLeave) return ezspLeave.apply(this, args);
@@ -166,6 +166,7 @@ export class HerdsmanRadio extends Radio {
     }
     this.states.set(ieee, state);
   }
+  async rejoin(ieee: string) {const device = this.device(ieee), adapter: any = (this.controller as any).adapter, clusterId = Zdo.ClusterId.LEAVE_REQUEST; await adapter.sendZdo(device.ieeeAddr, device.networkAddress, clusterId, Zdo.Buffalo.buildRequest(adapter.hasZdoMessageOverhead, clusterId, device.ieeeAddr, Zdo.LeaveRequestFlags.AND_REJOIN), true)}
   // asks it to leave; one that doesn't answer is forgotten anyway (here and in the adapter's list), so the slate is clean either way
   async remove(ieee: string) {const device = this.device(ieee); let answered = true; try {await device.removeFromNetwork()} catch {answered = false; device.removeFromDatabase()} this.definitions.delete(ieee); this.states.delete(ieee); return answered}
   // through one router only (a device that can't be moved, near that router), or anywhere

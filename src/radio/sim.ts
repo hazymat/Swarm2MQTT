@@ -52,8 +52,9 @@ export class SimRadio extends Radio {
   cutOff(device: SimDevice): boolean {const parent = this.devices.find(candidate => candidate.ieee === device.parent); return !!parent && (!!parent.off || this.cutOff(parent))}
   async stop() {for (const timer of this.timers) clearInterval(timer); this.timers = []}
   list(): RadioDevice[] {return this.devices.map(device => ({ieee: device.ieee, nwk: device.nwk, kind: device.kind, model: device.model, vendor: device.vendor, description: device.description, supported: device.supported, controls: device.controls, interviewing: device.interviewing, firmware: device.firmware}))}
-  async permitJoin(seconds: number) {
-    clearTimeout(this.joinTimer);
+  joinVia?: string;
+  async permitJoin(seconds: number, via?: string) {
+    clearTimeout(this.joinTimer); this.joinVia = seconds ? via : undefined;
     this.joinEnd = seconds ? Date.now() + seconds * 1000 : 0;
     this.emit("permitJoin", seconds);
     if (!seconds) return;
@@ -92,6 +93,7 @@ export class SimRadio extends Radio {
     Object.assign(device.state, values);
     this.emit("state", ieee, Object.assign({}, device.state), device.lqi);
   }
+  async rejoin(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee), via = this.joinVia; if (device && via) setTimeout(() => {device.parent = via; this.emit("joinInfo", ieee, {parent: via})}, 3000)}
   async remove(ieee: string) {const answered = !this.halfJoined.has(ieee); this.devices = this.devices.filter(device => device.ieee !== ieee); this.emit("left", ieee); return answered}
   halfJoined = new Map<string, SimDevice>();
   async ping(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee); if (!device || device.off || this.cutOff(device)) throw new Error("No response")}

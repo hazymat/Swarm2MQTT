@@ -8,12 +8,14 @@
   let reportOf = ieee => snap.joinReports?.find(report => report.ieee === ieee);
   // a device that can't be brought closer (a valve on a radiator) joins through the router nearest it instead
   let routers = $derived(snap.devices.filter(device => device.kind === "router" && device.status === "accepted" && device.health.online));
+  let moving = $derived(snap.join.moving), nameOf = ieee => snap.devices.find(device => device.ieee === ieee)?.name ?? "it";
   function joinNear(via) {act("join", {seconds: Math.max(30, Math.round((snap.join.endsAt - Date.now()) / 1000)), via})}
 </script>
 <div class="card joinbox">
   <h4><svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="8" width="12" height="9" rx="2" fill="var(--amber)"/><path d="M6 8V5a3 3 0 0 1 6 0" fill="none" stroke="var(--amber)" stroke-width="2"/></svg>Open for new devices</h4>
+  {#if moving}<div class="callout info"><span class="t">Moving <b>{nameOf(moving.ieee)}</b> to <b>{nameOf(moving.via)}</b>. Hold its button for a second to wake it (or its pairing button until it blinks if that doesn't do it). It keeps its name and settings.</span></div>{/if}
   {#if live.rejoin}<div class="callout info"><span class="t">Waiting for <b>{live.rejoin.name}</b> to come back. Put it in pairing mode and it gets its old name and settings.</span></div>{/if}
-  <p>Put your device in pairing mode now. Usually: hold its button for 5 seconds until it blinks.</p>
+  {#if !moving}<p>Put your device in pairing mode now. Usually: hold its button for 5 seconds until it blinks.</p>{/if}
   {#if routers.length}<label class="near"><span class="muted">Join near</span><select class="text" value={snap.join.via ?? ""} onchange={event => joinNear(event.currentTarget.value)}><option value="">Anywhere</option>{#each routers as router (router.ieee)}<option value={router.ieee}>{router.name}</option>{/each}</select></label>
   <p class="fieldhint">For a device that can't be moved closer, pick the plugged-in device nearest it: only that one lets it in.</p>{/if}
   <div class="warn"><span>⚠</span><span>While this is on, any device nearby can join and is handed your network key, including a neighbour's. It turns itself off after 4 minutes; stop it once your device is in.</span></div>
