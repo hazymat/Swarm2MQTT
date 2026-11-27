@@ -103,7 +103,9 @@ Swarm2MQTT service (Node + TypeScript, always running)
 
 ### 3.0 Look and behaviour: the same as Sift and Quizaroo
 
-Swarm2MQTT copies Sift's and Quizaroo's patterns rather than inventing new ones. Where this list is silent, do what Sift's `docs/ui-consistency.md` says.
+Swarm2MQTT follows the shared UI rules for every app: https://github.com/hazymat/sift/blob/main/docs/ui-consistency.md#rules-for-every-app. Where those and this list are silent, do what the rest of that doc says. A change here that adds or alters a shared pattern updates that section in the same piece of work.
+
+Applied here:
 
 - **Look:** Quizaroo's Glass theme (and its Light theme): navy gradient, glass cards with soft borders and big rounded corners, pastel tinted pills, light-weight page title with its icon, 👁 View and ⋯ top right, a round + top right (here: Add devices).
 - **Frame:** sidebar on a computer (Home, Groups, Activity, Settings at the bottom), each with its own pastel tint when active. On a phone the same four sit in a bar at the bottom, re-ordered by press, hold and drag as in Sift.
