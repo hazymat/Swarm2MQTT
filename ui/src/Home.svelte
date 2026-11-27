@@ -1,7 +1,7 @@
 <script>
   import {live, act, call, toast, undo} from "./api.svelte.js";
   import {view, toggleChosen, seeHint} from "./ui.svelte.js";
-  import {STATUS_COLOUR, ago, dayClock, signalBars, holdable} from "./util.js";
+  import {STATUS_COLOUR, ago, dayClock, deviceBars, holdable} from "./util.js";
   import Icon from "./Icon.svelte";
   import Pic from "./Pic.svelte";
   import MapView from "./MapView.svelte";
@@ -112,7 +112,7 @@
             </span>
             <span class="meta">
               {#if device.health.battery}<span title="Battery">{device.health.battery.percent}%</span>{/if}
-              <span class="bars" title="Signal">{#each [1, 2, 3, 4] as bar}<b class:on={bar <= signalBars(device.lqi ?? device.state.linkquality)} style="height:{bar * 3 + 1}px"></b>{/each}</span>
+              <span class="bars" title={device.rssi != null ? `Signal ${device.rssi} dBm` : "Signal"}>{#each [1, 2, 3, 4] as bar}<b class:on={bar <= deviceBars(device)} style="height:{bar * 3 + 1}px"></b>{/each}</span>
               <span class="seen">{ago(device.last_seen, view.now)}</span>
             </span>
           </button>

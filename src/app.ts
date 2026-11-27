@@ -35,6 +35,7 @@ export class App extends EventEmitter {
   retryMs = 2000; retryDelay = 2000; attempts = 0; lastRadioError?: string;
   retryTimer?: NodeJS.Timeout;
   scanTimer?: NodeJS.Timeout;
+  signals = new Map<string, {rssi: number; lqi?: number; at: number}>(); // strength of the last frame heard from each device, as the adapter measured it
   strays = new Set<string>(); // found on the network but missing from the device list
   scanSoon = false;
   onlineCache = new Map<string, boolean>();
@@ -84,7 +85,7 @@ export class App extends EventEmitter {
     radio.on("heard", ieee => this.onHeard(ieee));
     radio.on("joinStep", (ieee, step) => this.joinWatch.step(ieee, step));
     radio.on("joinFailed", (ieee, error) => this.joinWatch.fail(ieee, this.joinWatch.reports.get(ieee)?.failing?.step ?? "identified", error ?? "no answer"));
-    radio.on("signal", (ieee, rssi, lqi) => this.joinWatch.heard(ieee, rssi, lqi));
+    radio.on("signal", (ieee, rssi, lqi) => {this.joinWatch.heard(ieee, rssi, lqi); if (rssi !== undefined) this.signals.set(ieee, {rssi, lqi, at: Date.now()})});
     radio.on("delivery", (ieee, ok) => this.joinWatch.delivered(ieee, ok));
     radio.on("joinInfo", (ieee, info) => {if (this.joinWatch.watching(ieee) || this.joinEndsAt > Date.now()) this.joinWatch.set(ieee, info)});
     radio.on("stray", ieee => {this.strays.add(ieee); this.scanSoon = true});
@@ -441,7 +442,7 @@ export class App extends EventEmitter {
       join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia},
       // how each recent join went, with the verdict in plain words (names filled in)
       joinReports: Array.from(this.joinWatch.reports.values()).map(report => Object.assign({}, report, {verdict: diagnose(report, ieee => ieee ? this.store.device(ieee)?.name ?? ieee : "the adapter")})),
-      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
+      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
       stickIeee: this.stickIeee(), links: latest, scan: Object.assign({}, this.scan, {finishedAt: this.scan.finishedAt ?? this.store.get<number | undefined>("lastScan", undefined)}), groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),
       undo: this.store.undoList(30), changes: this.meshChanges(), backups: this.backups().map(entry => ({name: entry.name, ts: entry.ts, reason: entry.reason})),
     };

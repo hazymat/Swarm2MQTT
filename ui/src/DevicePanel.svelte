@@ -1,7 +1,7 @@
 <script>
   import {live, act, call, toast} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
-  import {STATUS_COLOUR, STATUS_WORD, ago, duration, dayClock, valueText} from "./util.js";
+  import {STATUS_COLOUR, STATUS_WORD, ago, duration, dayClock, valueText, rssiWord} from "./util.js";
   import {weeksText} from "./weeks.js";
   import Icon from "./Icon.svelte";
   import Pic from "./Pic.svelte";
@@ -118,7 +118,7 @@
       {/each}
     </div>
     {#if strip.tints.size}<div class="keys">{#each Array.from(strip.tints) as [parent, tint]}<span><i style="background:{tint}"></i>{nameOf(parent)}</span>{/each}<span><i class="gap"></i>Not seen</span></div>{/if}
-    <h3 style="margin-top:10px">Signal <span class="faint">{device.lqi ?? device.state.linkquality ?? "–"} of 255</span></h3>
+    <h3 style="margin-top:10px">Signal {#if device.rssi != null}<span class="faint">{rssiWord(device.rssi)}, {device.rssi} dBm{device.state.linkquality != null ? ` · link quality ${device.state.linkquality} of 255` : ""}</span>{:else}<span class="faint">link quality {device.state.linkquality ?? device.lqi ?? "–"} of 255</span>{/if}</h3>
     <Spark points={signal} min={0} max={255} height={36} label="Signal over 30 days"/>
   </div>
 

@@ -47,6 +47,10 @@ export function duration(ms) {
 export const clock = ts => new Date(ts).toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
 export const dayClock = ts => {const date = new Date(ts), today = new Date(); return (date.toDateString() === today.toDateString() ? "" : date.toLocaleDateString([], {day: "numeric", month: "short"}) + " ") + clock(ts)};
 export const signalBars = lqi => lqi == null ? 0 : lqi > 180 ? 4 : lqi > 120 ? 3 : lqi > 60 ? 2 : 1;
+// strength the adapter measured on the device's own messages (dBm, then link quality) wins; a neighbour's view of it (map check) only as a last resort
+export const rssiBars = rssi => rssi > -65 ? 4 : rssi > -75 ? 3 : rssi > -82 ? 2 : 1;
+export const rssiWord = rssi => rssi > -70 ? "Strong" : rssi > -82 ? "Fair" : "Weak";
+export const deviceBars = device => device.rssi != null ? rssiBars(device.rssi) : signalBars(device.state.linkquality ?? device.lqi);
 export function valueText(control, value) {
   if (value === undefined || value === null) return "–";
   if (control?.type === "binary") {if (control.property === "occupancy") return value === control.on ? "Motion" : "Clear"; if (control.property === "contact") return value === control.on ? "Closed" : "Open"; return value === control.on ? "On" : "Off"}
