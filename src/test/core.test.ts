@@ -107,12 +107,12 @@ test("end to end with the simulator: MQTT out and in, holding area, undo, heartb
   }
 });
 
-test("a stick that can't be reached never stops the service", {timeout: 30e3}, async () => {
+test("an adapter that can't be reached never stops the service", {timeout: 30e3}, async () => {
   const app = new App(mkdtempSync(`${tmpdir()}/s2m-`), false);
   app.store.put("stick", {path: "tcp://127.0.0.1:1", adapter: "ember", panId: 1, extendedPanId: [1, 2, 3, 4, 5, 6, 7, 8], channel: 20, networkKey: Array(16).fill(1)});
   await app.start();
   try {
-    await until(() => !app.radioStatus.up && app.radioStatus.reason !== "Starting…", 20e3);
+    await until(() => !app.radioStatus.up && !/^(Starting|Connecting)/.test(app.radioStatus.reason ?? ""), 20e3);
     assert.ok(app.retryTimer, "a retry is scheduled");
     assert.ok(app.snapshot().devices, "the page still gets a snapshot");
   } finally {clearTimeout(app.retryTimer); await app.stop().catch(() => {})}

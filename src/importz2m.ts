@@ -53,3 +53,24 @@ export function writeZ2mFiles(files: Z2mFiles, dataDir: string) {
   writeFileSync(`${dataDir}/herdsman.db`, files["database.db"]);
   if (files["coordinator_backup.json"]) writeFileSync(`${dataDir}/coordinator_backup.json`, files["coordinator_backup.json"]);
 }
+// Ask a running Zigbee2MQTT for its backup over MQTT (what its web page's backup button does): the data folder as a zip.
+// Read only: Zigbee2MQTT keeps running and keeps the adapter.
+export async function fetchZ2mBackup(server: {url: string; username?: string; password?: string}, baseTopic = "zigbee2mqtt"): Promise<Z2mFiles> {
+  const {default: mqtt} = await import("mqtt"), {unzipSync} = await import("fflate");
+  const client = mqtt.connect(server.url, {username: server.username || undefined, password: server.password || undefined, reconnectPeriod: 0, connectTimeout: 8000});
+  try {
+    const zip = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`Zigbee2MQTT didn't answer. Check it's running, and that its topic is ${baseTopic}.`)), 25000);
+      client.on("error", error => {clearTimeout(timer); reject(new Error(`Couldn't connect to the MQTT server: ${error.message}`))});
+      client.on("message", (_topic, payload) => {
+        let reply: any; try {reply = JSON.parse(payload.toString())} catch {return}
+        clearTimeout(timer);
+        if (reply.status === "ok" && reply.data?.zip) resolve(reply.data.zip); else reject(new Error(`Zigbee2MQTT said no: ${reply.error ?? "no backup in its answer"}`));
+      });
+      client.on("connect", () => client.subscribe(`${baseTopic}/bridge/response/backup`, () => client.publish(`${baseTopic}/bridge/request/backup`, "")));
+    });
+    const entries = unzipSync(Buffer.from(zip, "base64"), {filter: entry => WANTED.test(entry.name.split("/").pop() ?? "")}), files: Z2mFiles = {};
+    for (const [name, bytes] of Object.entries(entries)) files[name] = Buffer.from(bytes).toString("utf8");
+    return pickFiles(files);
+  } finally {client.end(true)}
+}

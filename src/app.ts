@@ -69,6 +69,7 @@ export class App extends EventEmitter {
   startRadio() {
     clearTimeout(this.retryTimer);
     if (!this.sim && !this.stick) {this.setRadioStatus({up: false, reason: "No Zigbee adapter set up yet."}); return}
+    if (!this.sim) this.setRadioStatus({up: false, reason: "Connecting to the Zigbee adapter…"});
     const radio: Radio = this.sim ? new SimRadio() : new HerdsmanRadio(this.stick!, this.dataDir);
     this.radio = radio;
     radio.on("status", status => {this.setRadioStatus(status); if (!status.up && radio === this.radio) this.retryRadio()});
@@ -87,7 +88,7 @@ export class App extends EventEmitter {
     this.retryMs = Math.min(this.retryMs * 2, 60e3);
   }
   async restartRadio() {clearTimeout(this.retryTimer); const radio = this.radio; this.radio = undefined; radio?.removeAllListeners(); await radio?.stop().catch(() => {}); this.retryMs = 2000; this.startRadio()}
-  setRadioStatus(status: RadioStatus) {const wasUp = this.radioStatus.up; this.radioStatus = status; if (wasUp !== status.up) {this.log(status.up ? "info" : "bad", status.up ? "Zigbee adapter connected." : status.reason ?? "Zigbee adapter lost."); this.mqtt.event(status.up ? "stick_up" : "stick_down", {text: status.reason})} this.changed()}
+  setRadioStatus(status: RadioStatus) {const wasUp = this.radioStatus.up; this.radioStatus = status; if (wasUp !== status.up) {this.log(status.up ? "info" : "bad", status.up ? "Zigbee adapter connected." : status.reason ?? "Zigbee adapter lost."); this.mqtt.event(status.up ? "adapter_up" : "adapter_down", {text: status.reason})} this.changed()}
 
   // Bring the store in line with what the radio knows about
   syncDevices() {for (const radioDevice of this.radio?.list() ?? []) this.upsert(radioDevice, false); this.changed()}

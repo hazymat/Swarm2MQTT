@@ -1,48 +1,76 @@
 <script>
+  // Setup: MQTT first (it's also how we ask Zigbee2MQTT for its network), then Zigbee2MQTT, then the adapter
   import {live, act, call, toast} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
-  import {readBackupZip} from "./z2mzip.js";
-  let step = $state(1), path = $state(""), adapter = $state("ember"), from = $state(null), files = $state(null), fileName = $state(""), preview = $state(null), busy = $state(false), dragging = $state(false);
-  let mqtt = $state({url: "", username: "", password: ""}), checks = $state(null);
-  // brief, read-only look at the adapter: nothing is sent to it and it's let go at once, so Zigbee2MQTT can still use it
-  async function checkStick() {busy = true; try {checks = await call("stickCheck", {path, adapter})} catch (error) {toast(error.message, null, "bad")} busy = false}
-  function useSuggestion(suggest) {if (suggest.path) path = suggest.path; if (suggest.adapter) adapter = suggest.adapter; checkStick()}
+  import {readBackupFiles} from "./z2mzip.js";
   view.wizard = true;
-  const HINTS = {ember: {likely: "tcp://<IP address>:6638", likelyWhere: "for an adapter on your network (SMLIGHT and similar)", other: "/dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "/dev/ttyUSB0", likelyWhere: "for an adapter plugged into this machine (Sonoff P, CC2652)", other: "tcp://<IP address>:6638", otherWhere: "on your network"}};
-  let hint = $derived(HINTS[adapter]);
-  async function pickZip(file) {
-    if (!file) return; busy = true; preview = null; fileName = file.name;
-    try {files = await readBackupZip(file); preview = await call("z2mPreview", {files})} catch (error) {files = null; toast(error.message, null, "bad")}
+  let snap = $derived(live.snap);
+  let step = $state(1), busy = $state(false);
+  // 1 MQTT
+  let mqtt = $state({url: "", username: "", password: ""}), probe = $state(null), probeError = $state("");
+  async function connectMqtt() {
+    busy = true; probe = null; probeError = "";
+    try {probe = await call("mqttProbe", {url: mqtt.url, username: mqtt.username, password: mqtt.password}); await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password}); if (probe.z2m[0]) {baseTopic = probe.z2m[0].baseTopic; from = "z2m"}}
+    catch (error) {probeError = error.message}
     busy = false;
   }
-  async function importZ2m() {busy = true; try {await act("z2mImport", {files, path, adapter, keepBaseTopic: true}); goMqtt()} catch {} busy = false}
-  async function newNetwork() {busy = true; try {await act("newNetwork", {path, adapter}); goMqtt()} catch {} busy = false}
-  function goMqtt() {step = 3}
-  // an import may bring Zigbee2MQTT's MQTT server: fill it in once it arrives
-  let prefilled = false;
-  $effect(() => {const settings = live.snap.mqtt.settings; if (step === 3 && !prefilled && settings?.url) {prefilled = true; mqtt = {url: settings.url, username: settings.username ?? "", password: settings.password ?? ""}}});
-  async function saveMqtt() {await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password}).catch(() => {})}
-  let snap = $derived(live.snap);
+  // 2 Zigbee2MQTT
+  let from = $state(null), baseTopic = $state("zigbee2mqtt"), network = $state(null), chosen = $state([]), byFiles = $state(false), dragging = $state(false), files = null;
+  let found = $derived(probe?.z2m.find(item => item.baseTopic === baseTopic) ?? probe?.z2m[0]);
+  async function refreshProbe() {busy = true; try {probe = await call("mqttProbe", {})} catch (error) {toast(error.message, null, "bad")} busy = false}
+  function gotNetwork(result) {network = result; files = result.files; chosen = result.devices.map(device => device.ieee); if (!path && result.adapterPath) path = result.adapterPath; if (result.adapterType) adapter = result.adapterType}
+  async function askZ2m() {busy = true; try {gotNetwork(await call("z2mFetch", {baseTopic}))} catch (error) {toast(error.message, null, "bad")} busy = false}
+  async function pickFiles(fileList) {
+    if (!fileList?.length) return; busy = true;
+    try {const picked = await readBackupFiles(fileList), preview = await call("z2mPreview", {files: picked}); gotNetwork(Object.assign({files: picked}, preview))} catch (error) {toast(error.message, null, "bad")}
+    busy = false;
+  }
+  const toggle = ieee => chosen = chosen.includes(ieee) ? chosen.filter(other => other !== ieee) : chosen.concat([ieee]);
+  // 3 Adapter
+  let path = $state(""), adapter = $state("ember"), checks = $state(null);
+  const HINTS = {ember: {likely: "tcp://<IP address>:6638", likelyWhere: "for an adapter on your network (SMLIGHT and similar)", other: "/dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "/dev/ttyUSB0", likelyWhere: "for an adapter plugged into this machine (Sonoff P, CC2652)", other: "tcp://<IP address>:6638", otherWhere: "on your network"}};
+  let hint = $derived(HINTS[adapter]);
+  // brief, read-only look at the adapter (nothing is sent, let go at once); when moving over, also whether Zigbee2MQTT has stopped
+  async function checkAdapter() {
+    busy = true;
+    try {
+      const result = await call("stickCheck", {path, adapter});
+      if (from === "z2m" && snap.mqtt.settings.url) {const seen = await call("mqttProbe", {}).catch(() => null), z2m = seen?.z2m.find(item => item.baseTopic === baseTopic); if (z2m?.running) {result.checks.push({label: "Zigbee2MQTT", result: "bad", text: "is still running and using the adapter.", fix: "Stop it now (only one of them can use the adapter), then Check again."}); result.result = "bad"; result.headline = "Stop Zigbee2MQTT first"} else if (seen) result.checks.push({label: "Zigbee2MQTT", result: "ok", text: "has stopped."})}
+      checks = result;
+    } catch (error) {toast(error.message, null, "bad")}
+    busy = false;
+  }
+  function useSuggestion(suggest) {if (suggest.path) path = suggest.path; if (suggest.adapter) adapter = suggest.adapter; checkAdapter()}
+  async function finish() {
+    busy = true;
+    try {
+      if (from === "z2m") await act("z2mImport", {files, path, adapter, keepBaseTopic: true, devices: chosen});
+      else await act("newNetwork", {path, adapter});
+      view.wizard = false;
+    } catch {}
+    busy = false;
+  }
 </script>
 <div class="wizard">
   <div class="brand"><img src="/icon.svg" width="44" alt=""><div><h1>Swarm2MQTT</h1><span class="muted">Zigbee2MQTT, but sensible.</span></div></div>
-  <div class="steps"><span class:on={step === 1}>Adapter</span><span class:on={step === 2}>Network</span><span class:on={step === 3}>MQTT</span></div>
+  <div class="steps"><span class:on={step === 1}>MQTT</span><span class:on={step === 2}>Zigbee2MQTT</span><span class:on={step === 3}>Adapter</span></div>
   {#if step === 1}
     <section class="card">
-      <h2>Where is your Zigbee adapter?</h2>
-      <div class="seg"><button class:on={adapter === "ember"} onclick={() => {adapter = "ember"; checks = null}}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => {adapter = "zstack"; checks = null}}>Z-Stack (Sonoff P, CC2652)</button></div>
-      <input class="text" placeholder={hint.likely} bind:value={path} oninput={() => checks = null} onkeydown={event => {if (event.key === "Enter" && path && !busy) checkStick()}}>
-      <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: <code>{hint.likely}</code><br>Or, {hint.otherWhere}: <code>{hint.other}</code></span></div>
-      {#if checks}
-        <div class="headline {checks.result}"><span class="big">{checks.result === "bad" ? "✕" : "✓"}</span>{checks.headline}</div>
+      <h2>Your MQTT server</h2>
+      <p class="muted">First, because it's how Swarm2MQTT talks to the rest of your home. If you're moving from Zigbee2MQTT, it's also how Swarm2MQTT asks it for your network, so nothing needs copying by hand.</p>
+      <input class="text" placeholder="mqtt://<IP address>:1883" bind:value={mqtt.url} oninput={() => {probe = null; probeError = ""}} onkeydown={event => {if (event.key === "Enter" && mqtt.url && !busy) connectMqtt()}}>
+      <div class="two"><input class="text" placeholder="User (if any)" bind:value={mqtt.username}><input class="text" type="password" placeholder="Password" bind:value={mqtt.password}></div>
+      {#if probe}
+        <div class="headline"><span class="big">✓</span>Connected to the MQTT server ({Math.max(1, probe.ms)} ms)</div>
         <ul class="checks">
-          {#each checks.checks as check}<li class={check.result}><span class="mark">{check.result === "ok" ? "✓" : check.result === "warn" ? "!" : "✕"}</span><div><b>{check.label}</b> {check.text}{#if check.fix}<div class="muted">{check.fix}</div>{/if}{#if check.suggest}<button class="link" onclick={() => useSuggestion(check.suggest)}>Use {check.suggest.path ?? (check.suggest.adapter === "zstack" ? "Z-Stack" : "Ember")}</button>{/if}</div></li>{/each}
+          {#each probe.z2m as item}<li class={item.running ? "ok" : "warn"}><span class="mark">{item.running ? "✓" : "!"}</span><div><b>Zigbee2MQTT {item.version}</b> found on topic <code>{item.baseTopic}</code>, {item.running ? "running" : "stopped"}{item.adapterPath ? `, using ${item.adapterPath}` : ""}.</div></li>
+          {:else}<li class="ok"><span class="mark">✓</span><div>No Zigbee2MQTT on this server. That's fine for a new network.</div></li>{/each}
         </ul>
-        <div class="row">
-          <button class="pill ghost" disabled={busy} onclick={checkStick}>{busy ? "Checking…" : "Check again"}</button>
-          {#if checks.result === "bad"}<button class="link" onclick={() => step = 2}>Carry on anyway ›</button>{:else}<button class="pill primary" onclick={() => step = 2}>Next</button>{/if}
-        </div>
-      {:else}<button class="pill primary" disabled={!path || path.includes("<") || busy} onclick={checkStick}>{busy ? "Checking…" : "Check the adapter"}</button>{/if}
+        <div class="row"><button class="pill primary" onclick={() => step = 2}>Next</button><button class="link" onclick={connectMqtt}>Check again</button></div>
+      {:else}
+        {#if probeError}<div class="headline bad"><span class="big">✕</span>{probeError}</div>{/if}
+        <div class="row"><button class="pill primary" disabled={!mqtt.url || busy} onclick={connectMqtt}>{busy ? "Connecting…" : probeError ? "Try again" : "Connect"}</button><button class="link" onclick={() => step = 2}>Skip for now ›</button></div>
+      {/if}
     </section>
   {:else if step === 2}
     <section class="card">
@@ -51,28 +79,57 @@
         <button class="option" class:on={from === "z2m"} onclick={() => from = "z2m"}><b>Yes, bring my network over</b><span class="muted">Same network, same devices, names and groups. Nothing is paired again.</span><span class="muted">You can switch back any time: stop one, start the other. Zigbee2MQTT's own files are never changed.</span></button>
         <button class="option" class:on={from === "new"} onclick={() => from = "new"}><b>No, start a new network</b><span class="muted">Every device must be paired again, one by one.</span><span class="muted">A device belongs to one network at a time, so pairing it here takes it off the old one.</span></button>
       </div>
-      {#if from === "z2m"}
-        <ol class="howto">
-          <li>Open Zigbee2MQTT's web page. If you've stopped it, start it again for a minute.</li>
-          <li>Go to <b>Settings &gt; Tools &gt; Request Zigbee2MQTT backup</b>. A zip downloads.</li>
-          <li>Stop Zigbee2MQTT. Only one of them can use the adapter.</li>
-          <li>Drop the zip here.</li>
-        </ol>
-        <label class="drop" class:dragging ondragover={event => {event.preventDefault(); dragging = true}} ondragleave={() => dragging = false} ondrop={event => {event.preventDefault(); dragging = false; pickZip(event.dataTransfer.files[0])}}>
-          <input type="file" accept=".zip,application/zip" hidden onchange={event => pickZip(event.currentTarget.files[0])}>
-          {#if busy && !preview}Reading {fileName}…{:else if preview}✓ {fileName}{:else}Drop the zip here, or click to pick it{/if}
-        </label>
-        {#if preview}<div class="callout info"><span class="t">Found {preview.summary}{preview.hasMqtt ? ", and the MQTT server" : ""}. The adapter from the first step is used: <code>{path}</code></span></div>
-          <button class="pill primary" disabled={busy} onclick={importZ2m}>Bring it over</button>{/if}
-      {:else if from === "new"}<button class="pill primary" disabled={busy} onclick={newNetwork}>Make the network</button>{/if}
-      <button class="link" onclick={() => step = 1}>‹ Back</button>
+      {#if from === "z2m" && !network}
+        {#if !byFiles && snap.mqtt.settings.url}
+          {#if found?.running}
+            <p>Swarm2MQTT asks Zigbee2MQTT {found.version} for a copy of its network, devices and groups. It keeps running, and nothing of it changes.</p>
+            <div class="row"><button class="pill primary" disabled={busy} onclick={askZ2m}>{busy ? "Asking Zigbee2MQTT…" : "Get my network from Zigbee2MQTT"}</button><button class="link" onclick={() => byFiles = true}>Or drop its files instead</button></div>
+          {:else}
+            <div class="headline warn"><span class="big">!</span>{found ? "Zigbee2MQTT is stopped" : "No Zigbee2MQTT on your MQTT server"}</div>
+            <p class="muted">{found ? "Start it again for a minute, so it can hand over its network. You'll stop it again before the last step." : "Start it if it's stopped. If it uses its own topic, type it here."}</p>
+            {#if !found}<label class="topic"><span class="muted">Zigbee2MQTT's topic</span><input class="text" bind:value={baseTopic}></label>{/if}
+            <div class="row"><button class="pill ghost" disabled={busy} onclick={refreshProbe}>{busy ? "Looking…" : "Check again"}</button>{#if !found}<button class="pill ghost" disabled={busy} onclick={askZ2m}>Ask anyway</button>{/if}<button class="link" onclick={() => byFiles = true}>Or drop its files instead</button></div>
+          {/if}
+        {:else}
+          <p>From Zigbee2MQTT's data folder, drop <b>configuration.yaml</b>, <b>database.db</b> and <b>coordinator_backup.json</b> here (and secret.yaml if you use one). A zip of the folder works too.</p>
+          <label class="drop" class:dragging ondragover={event => {event.preventDefault(); dragging = true}} ondragleave={() => dragging = false} ondrop={event => {event.preventDefault(); dragging = false; pickFiles(event.dataTransfer.files)}}>
+            <input type="file" multiple accept=".zip,.yaml,.db,.json" hidden onchange={event => pickFiles(event.currentTarget.files)}>
+            {busy ? "Reading…" : "Drop the files here, or click to pick them"}
+          </label>
+          {#if snap.mqtt.settings.url}<button class="link" onclick={() => byFiles = false}>‹ Ask Zigbee2MQTT over MQTT instead</button>{/if}
+        {/if}
+      {/if}
+      {#if from === "z2m" && network}
+        <div class="headline"><span class="big">✓</span>Got your network: {network.summary}</div>
+        {#if network.devices.length}
+          <div class="listhead"><b>Devices to bring over</b><span class="muted">{chosen.length} of {network.devices.length}</span><button class="link" onclick={() => chosen = chosen.length === network.devices.length ? [] : network.devices.map(device => device.ieee)}>{chosen.length === network.devices.length ? "None" : "All"}</button></div>
+          <ul class="devices">{#each network.devices as device (device.ieee)}<li><label><input type="checkbox" checked={chosen.includes(device.ieee)} onchange={() => toggle(device.ieee)}><span>{device.name}</span><span class="muted">{device.model ?? ""}</span></label></li>{/each}</ul>
+          <p class="muted small">Unticked devices stay on the network and wait in Waiting for you, sending nothing, until you accept them.</p>
+        {/if}
+        {#if network.groups?.length}<p class="muted small">Groups: {network.groups.join(", ")}</p>{/if}
+        <button class="link" onclick={() => {network = null; files = null}}>Get it again</button>
+      {/if}
+      <div class="row"><button class="pill primary" disabled={!from || (from === "z2m" && !network)} onclick={() => step = 3}>Next</button><button class="link" onclick={() => step = 1}>‹ Back</button></div>
     </section>
   {:else}
     <section class="card">
-      <h2>MQTT server {#if snap.mqtt.connected}<span class="ok">✓ Connected</span>{:else if snap.mqtt.error}<span class="bad">{snap.mqtt.error}</span>{/if}</h2>
-      <input class="text" placeholder="mqtt://192.168.1.10:1883" bind:value={mqtt.url}>
-      <div class="two"><input class="text" placeholder="User" bind:value={mqtt.username}><input class="text" type="password" placeholder="Password" bind:value={mqtt.password}></div>
-      <div class="row"><button class="pill ghost" disabled={!mqtt.url} onclick={saveMqtt}>Connect</button><button class="pill primary" onclick={() => view.wizard = false}>{snap.mqtt.connected ? "Done" : "Skip, I'll do it later"}</button></div>
+      <h2>Where is your Zigbee adapter?</h2>
+      {#if from === "z2m" && network?.adapterPath}<p class="muted">Filled in from Zigbee2MQTT.</p>{/if}
+      <div class="seg"><button class:on={adapter === "ember"} onclick={() => {adapter = "ember"; checks = null}}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => {adapter = "zstack"; checks = null}}>Z-Stack (Sonoff P, CC2652)</button></div>
+      <input class="text" placeholder={hint.likely} bind:value={path} oninput={() => checks = null} onkeydown={event => {if (event.key === "Enter" && path && !busy) checkAdapter()}}>
+      <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: <code>{hint.likely}</code><br>Or, {hint.otherWhere}: <code>{hint.other}</code></span></div>
+      {#if from === "z2m"}<div class="callout info"><span class="t">Stop Zigbee2MQTT now: only one of them can use the adapter. The check below tells you if it's still running.</span></div>{/if}
+      {#if checks}
+        <div class="headline {checks.result}"><span class="big">{checks.result === "bad" ? "✕" : "✓"}</span>{checks.headline}</div>
+        <ul class="checks">
+          {#each checks.checks as check}<li class={check.result}><span class="mark">{check.result === "ok" ? "✓" : check.result === "warn" ? "!" : "✕"}</span><div><b>{check.label}</b> {check.text}{#if check.fix}<div class="muted">{check.fix}</div>{/if}{#if check.suggest}<button class="link" onclick={() => useSuggestion(check.suggest)}>Use {check.suggest.path ?? (check.suggest.adapter === "zstack" ? "Z-Stack" : "Ember")}</button>{/if}</div></li>{/each}
+        </ul>
+        <div class="row">
+          <button class="pill ghost" disabled={busy} onclick={checkAdapter}>{busy ? "Checking…" : "Check again"}</button>
+          {#if checks.result === "bad"}<button class="link" disabled={busy} onclick={finish}>Carry on anyway: {from === "z2m" ? "bring it over" : "make the network"} ›</button>
+          {:else}<button class="pill primary" disabled={busy} onclick={finish}>{from === "z2m" ? "Bring it over" : "Make the network"}</button>{/if}
+        </div>
+      {:else}<div class="row"><button class="pill primary" disabled={!path || path.includes("<") || busy} onclick={checkAdapter}>{busy ? "Checking…" : "Check the adapter"}</button><button class="link" onclick={() => step = 2}>‹ Back</button></div>{/if}
     </section>
   {/if}
 </div>
@@ -103,9 +160,17 @@
   .mark{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--on-tint)}
   .ok .mark{background:var(--green)}.warn .mark{background:var(--amber)}.bad .mark{background:var(--red)}
   .row{align-items:center}
+  .topic{display:flex;align-items:center;gap:10px;font-size:14px}.topic .text{max-width:220px}
   .hint code,.callout code{font-family:ui-monospace,monospace;font-size:13px;white-space:nowrap}
   .howto{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px;font-size:14.5px}
   .drop{display:flex;align-items:center;justify-content:center;min-height:84px;padding:12px;border-radius:14px;border:1.5px dashed var(--glass-border);cursor:pointer;color:var(--muted);text-align:center}
   .drop.dragging,.drop:hover{border-color:var(--accent);color:var(--text)}
+  .listhead{display:flex;align-items:center;gap:10px}
+  .devices{list-style:none;max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding:6px;border-radius:14px;border:1px solid var(--glass-border)}
+  .devices label{display:flex;align-items:center;gap:10px;padding:5px 8px;border-radius:10px;cursor:pointer}
+  .devices label:hover{background:var(--glass-hover)}
+  .devices .muted{margin-left:auto;font-size:13px}
+  .small{font-size:13.5px}
+  .checks code,.checks li code{font-family:ui-monospace,monospace;font-size:13px}
   @media (max-width:700px){.choice{grid-template-columns:1fr}}
 </style>

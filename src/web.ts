@@ -5,9 +5,10 @@ import {extname, join, normalize} from "node:path";
 import {randomBytes} from "node:crypto";
 import {WebSocketServer, type WebSocket} from "ws";
 import type {App} from "./app.js";
-import {folderFiles, pickFiles, readZ2m, writeZ2mFiles, type Z2mFiles} from "./importz2m.js";
+import {fetchZ2mBackup, folderFiles, pickFiles, readZ2m, writeZ2mFiles, type Z2mFiles} from "./importz2m.js";
 import type {StickConfig} from "./radio/herdsman.js";
 import {checkStick} from "./stickcheck.js";
+import {probeMqtt} from "./mqttprobe.js";
 
 const TYPES: Record<string, string> = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json", ".ico": "image/x-icon"};
 const QUIET_CHANNELS = [15, 20, 25];
@@ -41,6 +42,7 @@ export function startWeb(app: App, port: number, uiDir: string) {
   return server;
 }
 
+const z2mSummary = (result: ReturnType<typeof readZ2m>) => ({summary: result.summary, baseTopic: result.mqtt.baseTopic, channel: result.stick.channel, adapterPath: result.stick.path, adapterType: result.stick.adapter, devices: result.devices.map(device => ({ieee: device.ieee, name: device.name, model: device.model, kind: device.kind})), groups: result.groups.map(group => group.name)});
 const z2mFiles = (args: any): Z2mFiles => args.files ? pickFiles(args.files) : folderFiles(String(args.folder ?? ""));
 
 async function command(app: App, name: string, args: any): Promise<unknown> {
@@ -73,6 +75,8 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "mqtt": {const value = Object.assign({}, args); if (value.password === "••••") delete value.password; return app.setSetting("mqtt", value, "MQTT settings changed")}
     case "prefs": {const result = app.setSetting("prefs", args, args.updateChannel ? `Updates: ${args.updateChannel} channel` : "Settings changed"); if (args.updateChannel) app.checkUpdate().catch(() => {}); return result}
     case "updateCheck": return app.checkUpdate();
+    // setup: check the MQTT server and look for Zigbee2MQTT on it; no args = the saved server
+    case "mqttProbe": {const server = args.url ? args : app.mqttSettings; if (args.password === "••••") server.password = app.mqttSettings.password; return probeMqtt(server)}
     case "stickCheck": return checkStick(String(args.path ?? ""), String(args.adapter ?? "ember"));
     case "whatsNewSeen": return app.markWhatsNewSeen(Number(args.id));
     case "updateNow": return app.updateNow();
@@ -86,16 +90,22 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "backupNow": return app.backup("by-hand");
     case "restore": return app.restore(args.name);
     // Zigbee2MQTT data comes as the files from its backup zip (unzipped in the browser), or a folder on this machine
-    case "z2mPreview": {const result = readZ2m(z2mFiles(args)); return {summary: result.summary, devices: result.devices.map(device => device.name), baseTopic: result.mqtt.baseTopic, hasMqtt: !!result.mqtt.url, path: result.stick.path}}
+    case "z2mPreview": return z2mSummary(readZ2m(z2mFiles(args)));
+    // ask the running Zigbee2MQTT for its backup over MQTT; the files go back to the page for the import
+    case "z2mFetch": {const files = await fetchZ2mBackup(args.mqtt?.url ? args.mqtt : app.mqttSettings, args.baseTopic || "zigbee2mqtt"); return Object.assign({files}, z2mSummary(readZ2m(files)))}
     case "z2mImport": {
       const files = z2mFiles(args), result = readZ2m(files);
       // the adapter typed in the wizard (or the one already set up) wins over Zigbee2MQTT's own setting
       result.stick.path = args.path || app.stick?.path || result.stick.path; result.stick.adapter = args.adapter || app.stick?.adapter || result.stick.adapter;
       app.backup("before-import");
       writeZ2mFiles(files, app.dataDir);
-      for (const device of result.devices) if (!app.store.device(device.ieee)) app.store.saveDevice(device);
+      // devices left unticked wait in "Waiting for you" (sending nothing) instead of being dropped from the network
+      const chosen: string[] | undefined = args.devices;
+      for (const device of result.devices) if (!app.store.device(device.ieee)) app.store.saveDevice(chosen && !chosen.includes(device.ieee) ? Object.assign(device, {status: "waiting"}) : device);
       for (const group of result.groups) app.store.saveGroup(group);
-      if (result.mqtt.url && !app.mqttSettings.url) app.applySetting("mqtt", Object.assign({}, app.store.get("mqtt", {}), result.mqtt, {baseTopic: args.keepBaseTopic ? result.mqtt.baseTopic : app.mqttSettings.baseTopic}));
+      // the MQTT server set up here wins over the one in Zigbee2MQTT's settings (that may be "localhost" on its own machine); its topic carries over
+      const mqttServer = args.mqtt?.url ? {url: args.mqtt.url, username: args.mqtt.username ?? "", password: args.mqtt.password ?? ""} : app.mqttSettings.url ? {} : {url: result.mqtt.url, username: result.mqtt.username, password: result.mqtt.password};
+      app.applySetting("mqtt", Object.assign({}, app.store.get("mqtt", {}), mqttServer, args.keepBaseTopic ? {baseTopic: result.mqtt.baseTopic} : {}));
       app.log("info", `Brought over from Zigbee2MQTT: ${result.summary}. Its own files weren't changed.`);
       app.applySetting("stick", result.stick);
       return result.summary;
