@@ -62,8 +62,8 @@ export class App extends EventEmitter {
     setInterval(() => {this.store.prune(); this.dailyBackup(); this.checkAvailability()}, 60e3).unref();
     setInterval(() => this.checkAvailability(), 5e3).unref();
     this.dailyBackup();
-    // look for app updates soon after starting, then every 6 hours; the page shows a bar when one is out
-    if (!this.sim) {setTimeout(() => this.checkUpdate().catch(() => {}), 5e3).unref(); setInterval(() => this.checkUpdate().catch(() => {}), 6 * 3600e3).unref()}
+    // look for app updates soon after starting, then hourly and whenever a page opens (at most every 10 min); the page shows a bar when one is out
+    if (!this.sim) {setTimeout(() => this.checkUpdate().catch(() => {}), 5e3).unref(); setInterval(() => this.checkUpdate().catch(() => {}), 3600e3).unref()}
   }
   // Radio supervisor: start, and on any failure mark it down and try again with backoff. Everything else keeps running.
   startRadio() {
@@ -365,6 +365,7 @@ export class App extends EventEmitter {
 
   // app updates: GitHub releases, stable or dev channel; the install script swaps versions and systemd restarts us
   update: {latest?: string; available?: boolean; channel?: "stable" | "dev"; checkedAt?: number; running?: boolean} = {};
+  checkUpdateSoon() {if (!this.sim && Date.now() - (this.update.checkedAt ?? 0) > 600e3) this.checkUpdate().catch(() => {})}
   async checkUpdate() {
     const response = await fetch("https://api.github.com/repos/hazymat/swarm2mqtt/releases?per_page=30", {headers: {accept: "application/vnd.github+json", "user-agent": "Swarm2MQTT"}});
     if (!response.ok) throw new Error("Couldn't reach GitHub to check for updates.");
