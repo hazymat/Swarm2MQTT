@@ -40,7 +40,7 @@
     <div class="kv"><span class="k">If it can't be predicted, warn at</span><span class="unit"><input class="text num" type="number" min="1" max="100" bind:value={prefs.batteryPercent} onchange={savePrefs}> %</span></div>
   </section>
 
-  <section class="card">
+  <section class="card" id="updates-card">
     <h2>Updates</h2>
     <div class="kv"><span class="k">Swarm2MQTT</span><span>{snap.version}</span></div>
     <div class="kv"><span class="k">Channel</span><span class="seg"><button class:on={prefs.updateChannel !== "dev"} onclick={() => {prefs.updateChannel = "stable"; act("prefs", {updateChannel: "stable"})}}>Stable</button><button class:on={prefs.updateChannel === "dev"} onclick={() => {prefs.updateChannel = "dev"; act("prefs", {updateChannel: "dev"})}}>Dev</button></span></div>

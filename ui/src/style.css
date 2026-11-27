@@ -56,3 +56,12 @@ code{word-break:break-all;font:12.5px/1.5 ui-monospace,"DejaVu Sans Mono",monosp
 .bars b.on{background:var(--text)}
 .empty{display:grid;place-items:center;gap:10px;padding:40px 20px;text-align:center;color:var(--muted)}
 select.text option{background:var(--sheet);color:var(--text)}
+
+/* Bottom floats stack, never overlap (shared rules): status bar, then the selection bar, then the update bar, then pills */
+body{--status-h:24px;--float-base:calc(var(--status-h) + 16px);--sel-lift:0px;--upd-lift:0px}
+body.has-select-bar{--sel-lift:58px}
+body.has-update{--upd-lift:54px}
+@media (max-width:700px){body.has-frame{--float-base:calc(var(--status-h) + 84px)}}
+/* Show me: the changed thing pulses */
+.flash{animation:flash 0.8s ease-in-out 3;border-radius:14px}
+@keyframes flash{50%{box-shadow:0 0 0 3px var(--accent)}}

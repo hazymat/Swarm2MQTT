@@ -65,7 +65,7 @@
   {/if}
 </div>
 <style>
-  .wizard{max-width:620px;margin:0 auto;padding:40px 16px;display:flex;flex-direction:column;gap:18px}
+  .wizard{max-width:620px;margin:0 auto;padding:40px 16px calc(80px + var(--status-h));display:flex;flex-direction:column;gap:18px}
   .brand{display:flex;gap:14px;align-items:center}
   h1{font-size:1.9rem;font-weight:300}
   .steps{display:flex;gap:18px;color:var(--faint)}.steps .on{color:var(--text);font-weight:500}

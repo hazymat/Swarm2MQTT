@@ -45,7 +45,18 @@ export class App extends EventEmitter {
   get prefs(): Prefs {return Object.assign({}, DEFAULT_PREFS, {updateChannel: this.update.channel ?? "stable"}, this.store.get("prefs", {}))}
   get stick(): StickConfig | undefined {return this.store.get<StickConfig | undefined>("stick", undefined)}
 
+  // What's new: shown once after an update. Before 0.1.7 there was no record of the last version, so an "Updating to" log line counts too.
+  whatsNew = {updated: false, seen: undefined as number | undefined};
+  noteVersion() {
+    const last = this.store.get<string | undefined>("lastVersion", undefined);
+    const updatingLine: any = this.store.db.prepare("SELECT id FROM events WHERE text=? LIMIT 1").get(`Updating Swarm2MQTT to ${VERSION}…`);
+    this.whatsNew = {updated: last ? last !== VERSION : !!updatingLine, seen: this.store.get<number | undefined>("whatsNewSeen", undefined)};
+    this.store.put("lastVersion", VERSION);
+  }
+  markWhatsNewSeen(id: number) {this.store.put("whatsNewSeen", id); this.whatsNew = {updated: false, seen: id}; this.changed()}
+
   async start() {
+    this.noteVersion();
     this.mqtt.start();
     this.startRadio();
     setInterval(() => {this.store.prune(); this.dailyBackup(); this.checkAvailability()}, 60e3).unref();
@@ -384,7 +395,7 @@ export class App extends EventEmitter {
   snapshot() {
     const devices = this.store.devices(), parents = this.parents(), all = new Map(devices.map(device => [device.ieee, device])), latest = this.store.linksAt();
     return {
-      version: VERSION, update: this.update, sim: this.sim, radio: this.radioStatus, mqtt: {connected: this.mqtt.connected, error: this.mqtt.error, settings: Object.assign({}, this.mqttSettings, {password: this.mqttSettings.password ? "••••" : ""})}, prefs: this.prefs, stickSet: !!this.stick || this.sim,
+      version: VERSION, whatsNew: this.whatsNew, update: this.update, sim: this.sim, radio: this.radioStatus, mqtt: {connected: this.mqtt.connected, error: this.mqtt.error, settings: Object.assign({}, this.mqttSettings, {password: this.mqttSettings.password ? "••••" : ""})}, prefs: this.prefs, stickSet: !!this.stick || this.sim,
       join: {endsAt: this.joinEndsAt, found: this.joinFound},
       devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
       stickIeee: this.stickIeee(), links: latest, groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),

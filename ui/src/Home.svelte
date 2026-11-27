@@ -146,7 +146,7 @@
   .sub{color:var(--muted);font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .meta{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;flex:none}
   .seen{min-width:70px;text-align:right}
-  .select-bar{position:fixed;left:calc(50% + 116px);bottom:24px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px 8px;background:var(--bar);border:1px solid var(--active-border);border-radius:24px;box-shadow:var(--shadow);white-space:nowrap;z-index:25;backdrop-filter:blur(20px);max-width:calc(100vw - 24px);overflow-x:auto}
+  .select-bar{position:fixed;left:calc(50% + 116px);bottom:var(--float-base);transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px 8px;background:var(--bar);border:1px solid var(--active-border);border-radius:24px;box-shadow:var(--shadow);white-space:nowrap;z-index:25;backdrop-filter:blur(20px);max-width:calc(100vw - 24px);overflow-x:auto}
   .select-bar .b{padding:5px 12px;border-radius:18px;background:var(--glass);border:1px solid var(--glass-border);font-size:14px}
   .select-bar .count{padding:0 8px;font-size:14px}
   .menuwrap{display:inline-flex;gap:4px}.menuwrap.open{background:var(--glass);border-radius:18px}
@@ -160,6 +160,6 @@
     .right{width:auto;overflow:visible;padding-bottom:20px}
     .meta .seen{display:none}
     .checked{display:none}
-    .select-bar{left:50%;bottom:92px}
+    .select-bar{left:50%}
   }
 </style>

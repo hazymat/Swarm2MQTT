@@ -11,10 +11,19 @@
   import Toasts from "./Toasts.svelte";
   import JoinPill from "./JoinPill.svelte";
   import UpdateBar from "./UpdateBar.svelte";
+  import StatusBar from "./StatusBar.svelte";
+  import WhatsNew from "./WhatsNew.svelte";
+  import {LATEST_ID} from "./whatsnew.js";
+  import {call} from "./api.svelte.js";
 
   const PAGES = {home: {label: "Home", icon: "home", tint: "var(--peach)"}, groups: {label: "Groups", icon: "groups", tint: "var(--mint)"}, activity: {label: "Activity", icon: "activity", tint: "var(--sky)"}, settings: {label: "Settings", icon: "settings", tint: "var(--lilac)"}};
   let snap = $derived(live.snap);
   let needsSetup = $derived(snap && !snap.stickSet && !snap.devices.length);
+  $effect(() => {document.body.classList.toggle("has-select-bar", view.chosen.length > 0)});
+  $effect(() => {document.body.classList.toggle("has-frame", !!snap && !needsSetup && !view.wizard)});
+  // What's new: open once after an update; a new install starts with everything seen
+  let whatsNewChecked = false;
+  $effect(() => {if (!snap || whatsNewChecked) return; whatsNewChecked = true; const seen = snap.whatsNew?.seen; if (snap.whatsNew?.updated && (seen ?? 0) < LATEST_ID) view.whatsNew = true; else if (seen === undefined) call("whatsNewSeen", {id: LATEST_ID}).catch(() => {})});
   $effect(() => {document.documentElement.dataset.theme = view.theme === "light" ? "light" : "glass"});
   // network status chip: one colour, one sentence, opens what it's about
   let status = $derived.by(() => {
@@ -74,18 +83,20 @@
     </main>
   </div>
   <Toasts/>
-  <UpdateBar/>
+  <UpdateBar inset/>
 {/if}
+{#if snap}<StatusBar/>{/if}
+{#if snap && view.whatsNew}<WhatsNew/>{/if}
 
 <style>
-  #sidebar{position:fixed;inset:0 auto 0 0;width:232px;display:flex;flex-direction:column;gap:4px;padding:16px 12px;background:var(--glass);border-right:1px solid var(--glass-border);backdrop-filter:blur(20px);z-index:10}
+  #sidebar{position:fixed;inset:0 auto var(--status-h) 0;width:232px;display:flex;flex-direction:column;gap:4px;padding:16px 12px;background:var(--glass);border-right:1px solid var(--glass-border);backdrop-filter:blur(20px);z-index:10}
   #wordmark{display:flex;align-items:center;gap:10px;padding:2px 8px 18px;font-weight:600;font-size:16px}
   .nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;font-weight:500;color:var(--muted);text-align:left;touch-action:none}
   .nav-item:hover{background:var(--glass)}
   .nav-item.active{background:var(--tint);color:var(--on-tint)}
   .nav-item.settings{margin-top:auto}
   .nav-item.lifted{box-shadow:0 14px 30px rgba(0,0,0,.4);z-index:2;position:relative;background:var(--sheet);color:var(--text)}
-  #page{margin-left:232px;height:100vh;display:flex;flex-direction:column}
+  #page{margin-left:232px;height:calc(100vh - var(--status-h));display:flex;flex-direction:column}
   #topbar{position:sticky;top:0;z-index:8;display:flex;align-items:center;gap:10px;min-height:64px;padding:10px 24px;background:var(--bar);border-bottom:1px solid var(--glass-border);backdrop-filter:blur(20px)}
   #page-title{flex:1;display:flex;align-items:center;gap:8px;font-size:1.7rem;font-weight:300;min-width:0;overflow:hidden;white-space:nowrap}
   .status{min-width:0;flex-shrink:1;overflow:hidden}
@@ -95,7 +106,7 @@
   .simbar{padding:6px 24px;font-size:13px;color:var(--muted);background:color-mix(in srgb,var(--lilac) 12%,transparent);border-bottom:1px solid var(--glass-border)}
   .content{flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
   @media (max-width:700px){
-    #sidebar{inset:auto 0 0 0;width:auto;flex-direction:row;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:6px 12px calc(10px + env(safe-area-inset-bottom));background:var(--bar);border-right:0;border-top:1px solid var(--glass-border)}
+    #sidebar{inset:auto 0 var(--status-h) 0;width:auto;flex-direction:row;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:6px 12px calc(10px + env(safe-area-inset-bottom));background:var(--bar);border-right:0;border-top:1px solid var(--glass-border)}
     #wordmark{display:none}
     .nav-item{flex-direction:column;gap:2px;padding:5px;font-size:12px;text-align:center}
     .nav-item.settings{margin-top:0}
@@ -106,6 +117,6 @@
     #topbar{gap:6px}
     .status{margin-right:auto}
     .status .sub{display:none}
-    .content{padding-bottom:84px;overflow:visible}
+    .content{padding-bottom:calc(84px + var(--status-h));overflow:visible}
   }
 </style>
