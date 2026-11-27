@@ -127,7 +127,7 @@
       <Spark points={health.checkIns.recentGaps.map((gap, index) => ({ts: index, value: gap}))} bars height={34} colour="var(--sky)" label="Recent gaps between check-ins"/>
       <div class="kv"><span class="k">Offline after</span>
         {#if health.checkIns.source === "override"}<button class="link" onclick={() => act("offlineAfter", {ieee: device.ieee, ms: null})}>Learn it again</button>
-        {:else}<span class="override"><input class="text num" placeholder="min" bind:value={overrideDraft}><button class="link" disabled={!Number(overrideDraft)} onclick={() => {act("offlineAfter", {ieee: device.ieee, ms: Number(overrideDraft) * 60e3}); overrideDraft = ""}}>Set</button></span>{/if}
+        {:else}<span class="override"><input class="text num" bind:value={overrideDraft}><span class="muted">min</span><button class="link" disabled={!Number(overrideDraft)} onclick={() => {act("offlineAfter", {ieee: device.ieee, ms: Number(overrideDraft) * 60e3}); overrideDraft = ""}}>Set</button></span>{/if}
       </div>
     </div>
     {#if health.battery}

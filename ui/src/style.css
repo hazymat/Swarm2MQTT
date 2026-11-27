@@ -65,3 +65,7 @@ body.has-update{--upd-lift:54px}
 /* Show me: the changed thing pulses */
 .flash{animation:flash 0.8s ease-in-out 3;border-radius:14px}
 @keyframes flash{50%{box-shadow:0 0 0 3px var(--accent)}}
+
+/* A box's format or example stays visible under it while typing, never only as a placeholder */
+.fieldhint{font-size:13px;color:var(--muted);margin-top:-4px}
+.fieldhint code{font-family:ui-monospace,monospace;font-size:12.5px;color:var(--text)}

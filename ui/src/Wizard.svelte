@@ -59,6 +59,7 @@
       <h2>Your MQTT server</h2>
       <p class="muted">First, because it's how Swarm2MQTT talks to the rest of your home. If you're moving from Zigbee2MQTT, it's also how Swarm2MQTT asks it for your network, so nothing needs copying by hand.</p>
       <input class="text" placeholder="mqtt://<IP address>:1883" bind:value={mqtt.url} oninput={() => {probe = null; probeError = ""}} onkeydown={event => {if (event.key === "Enter" && mqtt.url && !busy) connectMqtt()}}>
+      <div class="fieldhint">Like <code>mqtt://&lt;IP address&gt;:1883</code> (1883 is the usual port; <code>mqtts://</code> for an encrypted one)</div>
       <div class="two"><input class="text" placeholder="User (if any)" bind:value={mqtt.username}><input class="text" type="password" placeholder="Password" bind:value={mqtt.password}></div>
       {#if probe}
         <div class="headline"><span class="big">✓</span>Connected to the MQTT server ({Math.max(1, probe.ms)} ms)</div>
