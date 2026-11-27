@@ -92,7 +92,7 @@ Swarm2MQTT service (Node + TypeScript, always running)
 - **The service never exits because of the stick.** The radio supervisor owns herdsman. If the stick is missing or crashes, the supervisor marks the radio down, retries with backoff, and everything else keeps running. This is the core change from Z2M, which stops when the adapter fails.
 - **The store is the source of truth for the UI**, not herdsman's live state. That's what makes P14 possible.
 - **Settings live in the store**, edited through the UI. Export/import as JSON (or YAML, same content).
-- Runs on Linux as a Node service under systemd, installed with one command, in its own VM or container (first install: beside Z2M on the Proxmox host). No Docker in v1.
+- Runs on Linux as a Node service under systemd, installed with one command. No Docker in v1.
 - Updates: an in-app **Update now** button pulls GitHub releases. Two channels like WinSqueeze: every merge to main is a dev build, a chosen dev build is promoted to stable.
 - Same front-end stack and DESIGN.md as WinSqueeze.
 
@@ -190,7 +190,6 @@ Rule: every message names the thing, says what happened in its terms, and offers
 | Device offline, parent router offline | "Cut off: it talks through Hall plug, which is off." → Show Hall plug | Device panel, map |
 | Interview failed | "Couldn't finish setting up. Press any button on it to wake it." | Device panel |
 | Adapter disconnected | "Zigbee stick not found. Check it's plugged in." | Banner |
-| Network stick answers but Zigbee port refuses (stick switched to USB mode) | "Your stick has switched to USB mode. Press its button once; the blue light should go off." Not switched back automatically. | Banner |
 | MQTT connect failed | "Can't reach your MQTT server at 10.x.x.x. Wrong password?" | Settings > MQTT, header pill |
 | Unsupported device | "We know this is a Tuya device but not which one, so it has no controls yet." → Copy details to request support | Device panel |
 
@@ -201,7 +200,8 @@ The translation table is a file in the repo. Any error without an entry shows "S
 ## 6. MQTT per device
 
 - **Topic:** defaults to `swarm2mqtt/<name>` (P21). Editable per device; the global prefix lives in Settings > MQTT.
-- **Bridge state:** `swarm2mqtt/bridge/state` is retained `online`/`offline`, with `offline` set as the MQTT last will, the same signal Z2M gives. Existing "Z2M offline" alerts work by changing the topic.
+- **Bridge state:** `swarm2mqtt/bridge/state` is retained `online`/`offline`, with `offline` set as the MQTT last will.
+- **Heartbeat:** `swarm2mqtt/bridge/tele` every 60 s by default (Settings > MQTT, can be changed or turned off): uptime, stick up/down, devices online/total. Anything watching Swarm2MQTT just checks these keep arriving.
 - **Format**, per device, three choices:
   - One message: `…/kitchen_sensor` → `{"occupancy":true,"battery":80}`
   - One topic per value: `…/kitchen_sensor/occupancy` → `true`
@@ -243,7 +243,6 @@ No test network: we cut over on Mat's existing stick.
 2. Stop Z2M. Start Swarm2MQTT on the same stick. Devices stay paired.
 3. Repoint automations: change `zigbee2mqtt/` to `swarm2mqtt/` in flows and alert rules. The switching-over page lists every topic that changes.
 4. If anything is wrong: stop Swarm2MQTT, start Z2M. Its folder is never written to, so going back always works.
-5. First real join test: new devices (planned: seven radiator valves) are paired on Swarm2MQTT, not on Z2M first.
 
 ---
 
