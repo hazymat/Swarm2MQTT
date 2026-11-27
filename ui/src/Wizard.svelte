@@ -25,7 +25,8 @@
   async function refreshProbe() {busy = true; try {probe = await call("mqttProbe", {})} catch (error) {askError = error.message} busy = false}
   function gotNetwork(result) {network = result; files = result.files; chosen = result.devices.map(device => device.ieee); if (!path && result.adapterPath) path = result.adapterPath; if (result.adapterType) adapter = result.adapterType}
   // asking can take a while (Zigbee2MQTT zips its whole data folder): count the seconds, and keep any failure on the page
-  let askError = $state(""), askStarted = $state(0);
+  let askError = $state(""), askStarted = $state(0), logsOpen = $state(false);
+  const logCommand = $derived(found?.logRoot ? `find '${found.logRoot}' -mindepth 1 -maxdepth 1 -type d -mtime +1 -exec rm -rf {} +` : "");
   async function askZ2m() {busy = true; askError = ""; askStarted = Date.now(); try {gotNetwork(await call("z2mFetch", {baseTopic}))} catch (error) {askError = error.message} busy = false; askStarted = 0}
   async function pickFiles(fileList) {
     if (!fileList?.length) return; busy = true;
@@ -38,6 +39,14 @@
   let path = $state(""), adapter = $state("ember"), checks = $state(null);
   const HINTS = {ember: {likely: "Network, then its IP address (port 6638)", likelyWhere: "for an adapter on your network (SMLIGHT and similar)", other: "USB, then /dev/ttyUSB0", otherWhere: "plugged into this machine (Sonoff E, SkyConnect)"}, zstack: {likely: "USB, then /dev/ttyUSB0", likelyWhere: "for an adapter plugged into this machine (Sonoff P, CC2652)", other: "Network, then its IP address (port 6638)", otherWhere: "on your network"}};
   let hint = $derived(HINTS[adapter]);
+  // moving over with the adapter filled in: a guided 1-2-3, with Zigbee2MQTT's state watched live (every few seconds) until it stops
+  let guided = $derived(from === "z2m" && !!network?.adapterPath && !!snap.mqtt.settings.url), z2mRunning = $state(null);
+  $effect(() => {
+    if (step !== 3 || !guided) return;
+    let stopped = false;
+    (async () => {while (!stopped) {const seen = await call("mqttProbe", {}).catch(() => null); if (stopped) break; if (seen) z2mRunning = !!seen.z2m.find(item => item.baseTopic === baseTopic)?.running; if (z2mRunning === false) break; await new Promise(resolve => setTimeout(resolve, 3000))}})();
+    return () => {stopped = true};
+  });
   // a changed address needs checking again
   $effect(() => {mqtt.url; probe = null; probeError = ""});
   $effect(() => {path; checks = null});
@@ -46,7 +55,7 @@
     busy = true;
     try {
       const result = await call("stickCheck", {path, adapter});
-      if (from === "z2m" && snap.mqtt.settings.url) {const seen = await call("mqttProbe", {}).catch(() => null), z2m = seen?.z2m.find(item => item.baseTopic === baseTopic); if (z2m?.running) {result.checks.push({label: "Zigbee2MQTT", result: "bad", text: "is still running and using the adapter.", fix: "Stop it now (only one of them can use the adapter), then Check again."}); result.result = "bad"; result.headline = "Stop Zigbee2MQTT first"} else if (seen) result.checks.push({label: "Zigbee2MQTT", result: "ok", text: "has stopped."})}
+      if (from === "z2m" && snap.mqtt.settings.url) {const seen = await call("mqttProbe", {}).catch(() => null), z2m = seen?.z2m.find(item => item.baseTopic === baseTopic); z2mRunning = seen ? !!z2m?.running : z2mRunning; if (z2m?.running) {result.checks.push({label: "Zigbee2MQTT", result: "bad", text: "is still running and using the adapter.", fix: "Stop it now (only one of them can use the adapter), then Check again."}); result.result = "bad"; result.headline = "Stop Zigbee2MQTT first"} else if (seen) result.checks.push({label: "Zigbee2MQTT", result: "ok", text: "has stopped."})}
       checks = result;
     } catch (error) {finishError = error.message}
     busy = false;
@@ -100,6 +109,20 @@
           {#if found?.running}
             <p>Swarm2MQTT asks Zigbee2MQTT {found.version} for a copy of its network, devices and groups. It keeps running, and nothing of it changes.</p>
             {#if askError}<div class="headline bad"><span class="big">✕</span><div>Didn't get your network<div class="why">{askError}</div></div></div>{/if}
+            {#if found.logRoot}
+              {#if !logsOpen && !/old logs/.test(askError)}<div class="alt">Before you start: Zigbee2MQTT can choke on its own old logs. <button onclick={() => logsOpen = true}>Clear them first</button></div>
+              {:else}
+                <div class="logs">
+                  <b>Clear Zigbee2MQTT's old logs</b>
+                  <ol>
+                    <li>On the Zigbee2MQTT machine, run this{found.logRoot.startsWith("/app/") ? " inside its Docker container" : ""}. It deletes its log folders older than a day, which Zigbee2MQTT is meant to do itself.
+                      <div class="cmd"><code class="selectable">{logCommand}</code><button class="pill ghost small" onclick={() => navigator.clipboard?.writeText(logCommand).then(() => toast("Copied", null))}>Copy</button></div>
+                    </li>
+                    <li>Then get your network below. It can take a few minutes if there were many.</li>
+                  </ol>
+                </div>
+              {/if}
+            {/if}
             <div class="actions"><button class="pill primary" disabled={busy} onclick={askZ2m}>{busy ? "Asking Zigbee2MQTT…" : askError ? "Try again" : "Get my network from Zigbee2MQTT"}</button>{#if askStarted}<span class="muted waiting">Zigbee2MQTT is making its backup… {Math.round((view.now - askStarted) / 1000)} s (it can take a minute)</span>{/if}</div>
             <div class="alt">Can't use MQTT? <button onclick={() => byFiles = true}>Drop its files instead</button></div>
           {:else}
@@ -133,12 +156,25 @@
     </section>
   {:else}
     <section class="card">
-      <h2>Where is your Zigbee adapter?</h2>
-      {#if from === "z2m" && network?.adapterPath}<p class="muted">Filled in from Zigbee2MQTT.</p>{/if}
-      <div class="seg"><button class:on={adapter === "ember"} onclick={() => {adapter = "ember"; checks = null}}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => {adapter = "zstack"; checks = null}}>Z-Stack (Sonoff P, CC2652)</button></div>
-      {#key adapter}<AddressField bind:value={path} kinds={ADAPTER_KINDS} defaultKind={adapter === "zstack" && !path ? 1 : 0} onenter={() => {if (path && !busy) checkAdapter()}}/>{/key}
-      <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: {hint.likely}.<br>Or, {hint.otherWhere}: {hint.other}.</span></div>
-      {#if from === "z2m"}<div class="callout info"><span class="t">Stop Zigbee2MQTT now: only one of them can use the adapter. The check below tells you if it's still running.</span></div>{/if}
+      {#snippet adapterFields()}
+        <div class="seg"><button class:on={adapter === "ember"} onclick={() => {adapter = "ember"; checks = null}}>Ember (Sonoff E, SMLIGHT, SkyConnect)</button><button class:on={adapter === "zstack"} onclick={() => {adapter = "zstack"; checks = null}}>Z-Stack (Sonoff P, CC2652)</button></div>
+        {#key adapter}<AddressField bind:value={path} kinds={ADAPTER_KINDS} defaultKind={adapter === "zstack" && !path ? 1 : 0} onenter={() => {if (path && !busy) checkAdapter()}}/>{/key}
+      {/snippet}
+      {#if guided}
+        <h2>Your Zigbee adapter</h2>
+        <div class="headline ok"><span class="big">✓</span>Found your adapter settings in Zigbee2MQTT</div>
+        <ol class="guide">
+          <li><span class="num">1</span><div><b>Check the address looks right</b>{@render adapterFields()}</div></li>
+          <li class:done={z2mRunning === false}><span class="num">{z2mRunning === false ? "✓" : "2"}</span><div><b>Stop Zigbee2MQTT</b><span class="muted">Only one of them can use the adapter.</span>
+            <span class="live {z2mRunning === false ? "stopped" : z2mRunning ? "running" : ""}"><span class="dot"></span>{z2mRunning === false ? "Stopped" : z2mRunning ? "Still running" : "Looking…"}</span></div></li>
+          <li class:done={checks && checks.result !== "bad"}><span class="num">{checks && checks.result !== "bad" ? "✓" : "3"}</span><div><b>{checks ? "Checked the adapter" : "Press Check the adapter"}</b></div></li>
+        </ol>
+      {:else}
+        <h2>Where is your Zigbee adapter?</h2>
+        {@render adapterFields()}
+        <div class="callout info hint"><span class="t">Most likely, {hint.likelyWhere}: {hint.likely}.<br>Or, {hint.otherWhere}: {hint.other}.</span></div>
+        {#if from === "z2m"}<div class="callout info"><span class="t">Stop Zigbee2MQTT now: only one of them can use the adapter. The check below tells you if it's still running.</span></div>{/if}
+      {/if}
       {#if checks}
         <div class="headline {checks.result}"><span class="big">{checks.result === "bad" ? "✕" : "✓"}</span>{checks.headline}</div>
         <ul class="checks">
@@ -181,6 +217,17 @@
   .foot .pill,.actions .pill{align-self:auto}
   .why{font-size:14px;font-weight:400;color:var(--muted);margin-top:4px}
   .waiting{font-size:14px}
+  .logs{border:1px solid var(--glass-border);border-radius:12px;padding:12px 14px;font-size:14px}.logs ol{margin:8px 0 0;padding-left:20px;display:grid;gap:8px}
+  .cmd{display:flex;align-items:flex-start;gap:8px;margin-top:6px}.cmd code{flex:1;min-width:0;overflow-x:auto;white-space:normal;word-break:break-all;padding:7px 10px;border-radius:8px;background:var(--well);color:var(--code);font-size:12.5px}
+  .guide{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:14px}
+  .guide li{display:grid;grid-template-columns:28px 1fr;gap:12px;align-items:start}
+  .guide li > div{display:flex;flex-direction:column;gap:8px;min-width:0}
+  .num{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--glass);border:1px solid var(--glass-border);font-weight:600;font-size:14px}
+  .guide li.done .num{background:var(--green);border-color:var(--green);color:var(--on-tint)}
+  .live{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}.live .dot{width:9px;height:9px;border-radius:50%;background:var(--faint)}
+  .live.running{color:var(--amber)}.live.running .dot{background:var(--amber);animation:pulse 1.4s ease-in-out infinite}
+  .live.stopped{color:var(--green)}.live.stopped .dot{background:var(--green)}
+  @keyframes pulse{50%{opacity:.3}}
   .alt{font-size:13.5px;color:var(--muted);margin-top:-4px}.alt button{color:var(--accent);font-size:13.5px}
   .headline{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:500;padding:12px 14px;border-radius:14px;color:var(--text);background:color-mix(in srgb,var(--green) 14%,transparent);border:1px solid color-mix(in srgb,var(--green) 45%,transparent)}
   .headline.warn{background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}

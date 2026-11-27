@@ -89,6 +89,6 @@ export async function fetchZ2mBackup(server: {url: string; username?: string; pa
 
 // Zigbee2MQTT's backup walks every file in its data folder recursively (logs too, before leaving them out). Hundreds of thousands of old log folders overflow that walk.
 function backupFailed(said?: string): string {
-  if (/call stack/i.test(said ?? "")) return `Zigbee2MQTT's data folder is too big for it to back up, usually because of old logs: it makes a new folder in data/log every time it starts and doesn't always clear them. Move its log and log-old folders out of the data folder (they aren't needed), then try again. Or drop its files instead.`;
+  if (/call stack/i.test(said ?? "")) return `Zigbee2MQTT's data folder is too big for it to back up, usually because of old logs: it makes a new folder in data/log every time it starts and doesn't always clear them. Clear its old logs with the steps below (they aren't needed), then try again. Or drop its files instead.`;
   return `Zigbee2MQTT couldn't make its backup. It said: "${said ?? "no backup in its answer"}". Try again, or drop its files instead.`;
 }

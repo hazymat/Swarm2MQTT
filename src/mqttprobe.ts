@@ -1,6 +1,6 @@
 // Setup's MQTT check: connect, see who's there (any Zigbee2MQTT from its retained bridge messages), then let go
 // running = it answered a health check just now; a retained "online" alone can be left behind by an old install
-export interface Z2mFound {baseTopic: string; running: boolean; answered?: boolean; leftBehind?: boolean; version?: string; adapterPath?: string; adapterType?: "ember" | "zstack"; coordinator?: string}
+export interface Z2mFound {baseTopic: string; running: boolean; answered?: boolean; leftBehind?: boolean; version?: string; adapterPath?: string; adapterType?: "ember" | "zstack"; coordinator?: string; logRoot?: string}
 export async function probeMqtt(server: {url: string; username?: string; password?: string}): Promise<{ms: number; z2m: Z2mFound[]}> {
   if (!/^mqtts?:\/\/|^wss?:\/\//.test(server.url ?? "")) throw new Error("Write the address like mqtt://192.168.1.10:1883.");
   const {default: mqtt} = await import("mqtt"), started = Date.now();
@@ -18,7 +18,7 @@ export async function probeMqtt(server: {url: string; username?: string; passwor
       let data: any; try {data = JSON.parse(text)} catch {data = text}
       if (kind === "state") entry(base).running = (typeof data === "string" ? data : data?.state) === "online";
       if (kind === "response" && topic.endsWith("/health_check")) entry(base).answered = true;
-      if (kind === "info" && data?.version) {const item = entry(base), serial = data.config?.serial ?? {}; item.version = data.version; item.adapterPath = serial.port; item.adapterType = serial.adapter === "zstack" ? "zstack" : serial.adapter === "ember" || serial.adapter === "ezsp" ? "ember" : undefined; item.coordinator = data.coordinator?.type}
+      if (kind === "info" && data?.version) {const item = entry(base), serial = data.config?.serial ?? {}; item.version = data.version; item.adapterPath = serial.port; item.adapterType = serial.adapter === "zstack" ? "zstack" : serial.adapter === "ember" || serial.adapter === "ezsp" ? "ember" : undefined; item.coordinator = data.coordinator?.type; item.logRoot = logRoot(data.config?.advanced)}
     });
     await new Promise<void>(resolve => client.subscribe(["+/bridge/state", "+/bridge/info", "+/bridge/response/health_check"], () => resolve()));
     await new Promise(resolve => setTimeout(resolve, 1200));
@@ -29,6 +29,13 @@ export async function probeMqtt(server: {url: string; username?: string; passwor
     for (const item of z2m) {item.leftBehind = !item.answered && item.running; item.running = !!item.answered}
     return {ms, z2m: z2m.sort((first, second) => Number(second.running) - Number(first.running))};
   } finally {client.end(true)}
+}
+
+// Where Zigbee2MQTT keeps a log folder per start (data/log/<timestamp>). It's meant to keep 10, but they can pile up into the hundreds of thousands, and then its backup gives up.
+function logRoot(advanced: any): string | undefined {
+  const directory = String(advanced?.log_directory ?? ""), outputs = advanced?.log_output ?? ["console", "file"];
+  if (!directory.includes("%TIMESTAMP%") || !(Array.isArray(outputs) ? outputs : [outputs]).includes("file")) return undefined;
+  return directory.slice(0, directory.indexOf("%TIMESTAMP%")).replace(/\/+$/, "") || undefined;
 }
 
 // Remove what an old Zigbee2MQTT left behind on the MQTT server: every retained message under its topic
