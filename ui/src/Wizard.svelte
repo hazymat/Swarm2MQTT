@@ -10,13 +10,15 @@
   let mqtt = $state({url: "", username: "", password: ""}), probe = $state(null), probeError = $state("");
   async function connectMqtt() {
     busy = true; probe = null; probeError = "";
-    try {probe = await call("mqttProbe", {url: mqtt.url, username: mqtt.username, password: mqtt.password}); await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password}); if (probe.z2m[0]) {baseTopic = probe.z2m[0].baseTopic; from = "z2m"}}
+    try {probe = await call("mqttProbe", {url: mqtt.url, username: mqtt.username, password: mqtt.password}); await act("mqtt", {url: mqtt.url, username: mqtt.username, password: mqtt.password}); const pick = probe.z2m.find(item => item.running) ?? probe.z2m.find(item => !item.leftBehind); if (pick) {baseTopic = pick.baseTopic; from = "z2m"}}
     catch (error) {probeError = error.message}
     busy = false;
   }
+  // old messages can't come back once removed, so it waits for the pill's doughnut (Undo stops it)
+  function clearOld(topic) {toast(`Removing what the old Zigbee2MQTT left on ${topic}`, null, "info", async () => {try {const count = await call("mqttClearLeftBehind", {baseTopic: topic}); toast(`Removed ${count} old messages`, null); probe = await call("mqttProbe", {})} catch (error) {toast(error.message, null, "bad")}})}
   // 2 Zigbee2MQTT
   let from = $state(null), baseTopic = $state("zigbee2mqtt"), network = $state(null), chosen = $state([]), byFiles = $state(false), dragging = $state(false), files = null;
-  let found = $derived(probe?.z2m.find(item => item.baseTopic === baseTopic) ?? probe?.z2m[0]);
+  let found = $derived(probe?.z2m.find(item => item.baseTopic === baseTopic && !item.leftBehind) ?? probe?.z2m.find(item => !item.leftBehind));
   async function refreshProbe() {busy = true; try {probe = await call("mqttProbe", {})} catch (error) {toast(error.message, null, "bad")} busy = false}
   function gotNetwork(result) {network = result; files = result.files; chosen = result.devices.map(device => device.ieee); if (!path && result.adapterPath) path = result.adapterPath; if (result.adapterType) adapter = result.adapterType}
   async function askZ2m() {busy = true; try {gotNetwork(await call("z2mFetch", {baseTopic}))} catch (error) {toast(error.message, null, "bad")} busy = false}
@@ -64,7 +66,9 @@
       {#if probe}
         <div class="headline"><span class="big">✓</span>Connected to the MQTT server ({Math.max(1, probe.ms)} ms)</div>
         <ul class="checks">
-          {#each probe.z2m as item}<li class={item.running ? "ok" : "warn"}><span class="mark">{item.running ? "✓" : "!"}</span><div><b>Zigbee2MQTT {item.version}</b> found on topic <code>{item.baseTopic}</code>, {item.running ? "running" : "stopped"}{item.adapterPath ? `, using ${item.adapterPath}` : ""}.</div></li>
+          {#each probe.z2m as item}
+            {#if item.leftBehind}<li class="old"><span class="mark">?</span><div><b>Zigbee2MQTT {item.version}</b> on topic <code>{item.baseTopic}</code> isn't answering.<div class="muted">An old install left its messages on your MQTT server{item.adapterPath ? ` (it used ${item.adapterPath})` : ""}. Nothing is running there now.</div><button class="link" onclick={() => clearOld(item.baseTopic)}>Remove its old messages</button></div></li>
+            {:else}<li class={item.running ? "ok" : "warn"}><span class="mark">{item.running ? "✓" : "!"}</span><div><b>Zigbee2MQTT {item.version}</b> on topic <code>{item.baseTopic}</code>: {item.running ? "running, and it answered just now" : "stopped"}{item.adapterPath ? `, using ${item.adapterPath}` : ""}.</div></li>{/if}
           {:else}<li class="ok"><span class="mark">✓</span><div>No Zigbee2MQTT on this server. That's fine for a new network.</div></li>{/each}
         </ul>
         <div class="row"><button class="pill primary" onclick={() => step = 2}>Next</button><button class="link" onclick={connectMqtt}>Check again</button></div>
@@ -159,6 +163,7 @@
   .checks li{display:flex;gap:10px;align-items:flex-start;font-size:14.5px}
   .checks .muted{font-size:13.5px}
   .mark{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--on-tint)}
+  .checks li.old{color:var(--muted)}.old .mark{background:var(--glass-hover);color:var(--text)}
   .ok .mark{background:var(--green)}.warn .mark{background:var(--amber)}.bad .mark{background:var(--red)}
   .row{align-items:center}
   .topic{display:flex;align-items:center;gap:10px;font-size:14px}.topic .text{max-width:220px}

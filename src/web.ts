@@ -8,7 +8,7 @@ import type {App} from "./app.js";
 import {fetchZ2mBackup, folderFiles, pickFiles, readZ2m, writeZ2mFiles, type Z2mFiles} from "./importz2m.js";
 import type {StickConfig} from "./radio/herdsman.js";
 import {checkStick} from "./stickcheck.js";
-import {probeMqtt} from "./mqttprobe.js";
+import {clearLeftBehind, probeMqtt} from "./mqttprobe.js";
 
 const TYPES: Record<string, string> = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json", ".webmanifest": "application/manifest+json", ".ico": "image/x-icon"};
 const QUIET_CHANNELS = [15, 20, 25];
@@ -78,6 +78,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "updateCheck": return app.checkUpdate();
     // setup: check the MQTT server and look for Zigbee2MQTT on it; no args = the saved server
     case "mqttProbe": {const server = args.url ? args : app.mqttSettings; if (args.password === "••••") server.password = app.mqttSettings.password; return probeMqtt(server)}
+    case "mqttClearLeftBehind": return clearLeftBehind(app.mqttSettings, String(args.baseTopic ?? ""));
     case "stickCheck": return checkStick(String(args.path ?? ""), String(args.adapter ?? "ember"));
     case "whatsNewSeen": return app.markWhatsNewSeen(Number(args.id));
     case "updateNow": return app.updateNow();
