@@ -10,7 +10,9 @@ while [ $# -gt 0 ]; do case "$1" in --update) mode=update; tag="$2"; shift;; --d
 need_node() { local version; version=$(node -v 2>/dev/null | sed 's/v//') || true; [ -n "$version" ] && [ "$(printf '%s\n22.13.0\n' "$version" | sort -V | head -1)" = "22.13.0" ]; }
 if [ -z "$tag" ]; then
   api=https://api.github.com/repos/$REPO/releases
-  if [ "$channel" = dev ]; then tag=$(curl -fsSL "$api" | grep -m1 '"tag_name"' | cut -d'"' -f4); else tag=$(curl -fsSL "$api/latest" | grep -m1 '"tag_name"' | cut -d'"' -f4); fi
+  # read the whole reply first: grep stopping early would make curl fail under pipefail
+  if [ "$channel" = dev ]; then releases=$(curl -fsSL "$api") || { echo "Couldn't reach GitHub."; exit 1; }; else releases=$(curl -fsSL "$api/latest") || { echo "Couldn't reach GitHub."; exit 1; }; fi
+  tag=$(printf '%s\n' "$releases" | grep '"tag_name"' | sed -n 1p | cut -d'"' -f4)
 fi
 [ -n "$tag" ] || { echo "No release found."; exit 1; }
 if [ "$mode" = install ]; then
