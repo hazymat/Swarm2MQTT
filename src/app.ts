@@ -69,7 +69,7 @@ export class App extends EventEmitter {
     setInterval(() => {this.checkAvailability(); if (!this.radioStatus.up && this.stick) this.changed()}, 5e3).unref(); // while the adapter isn't up, the page sees its messages as they come
     this.dailyBackup();
     // look for app updates soon after starting, then hourly and whenever a page opens (at most every 10 min); the page shows a bar when one is out
-    if (!this.sim) {setTimeout(() => this.checkUpdate().catch(() => {}), 5e3).unref(); setInterval(() => this.checkUpdate().catch(() => {}), 3600e3).unref()}
+    if (!this.sim) {setTimeout(() => this.checkUpdate().catch(() => {}), 5e3).unref(); setInterval(() => this.checkUpdate().catch(() => {}), 120e3).unref()}
   }
   // Radio supervisor: start, and on any failure mark it down and try again with backoff. Everything else keeps running.
   startRadio() {
@@ -403,11 +403,13 @@ export class App extends EventEmitter {
 
   // app updates: GitHub releases, stable or dev channel; the install script swaps versions and systemd restarts us
   update: {latest?: string; available?: boolean; channel?: "stable" | "dev"; checkedAt?: number; running?: boolean} = {};
-  checkUpdateSoon() {if (!this.sim && Date.now() - (this.update.checkedAt ?? 0) > 600e3) this.checkUpdate().catch(() => {})}
+  checkUpdateSoon() {if (!this.sim && Date.now() - (this.update.checkedAt ?? 0) > 20e3) this.checkUpdate().catch(() => {})}
+  // every 2 minutes and on opening the page: GitHub answers "nothing new" (304) free of its hourly limit, so checking often costs nothing
+  releasesEtag?: string; releases: any[] = [];
   async checkUpdate() {
-    const response = await fetch("https://api.github.com/repos/hazymat/swarm2mqtt/releases?per_page=30", {headers: {accept: "application/vnd.github+json", "user-agent": "Swarm2MQTT"}});
-    if (!response.ok) throw new Error("Couldn't reach GitHub to check for updates.");
-    const releases: any[] = await response.json(), chosen = this.store.get<Partial<Prefs>>("prefs", {}).updateChannel;
+    const response = await fetch("https://api.github.com/repos/hazymat/swarm2mqtt/releases?per_page=30", {headers: Object.assign({accept: "application/vnd.github+json", "user-agent": "Swarm2MQTT"}, this.releasesEtag ? {"if-none-match": this.releasesEtag} : {}) as Record<string, string>});
+    if (response.status === 304 && this.releases.length) {} else if (!response.ok) throw new Error("Couldn't reach GitHub to check for updates."); else {this.releases = await response.json(); this.releasesEtag = response.headers.get("etag") ?? undefined}
+    const releases = this.releases, chosen = this.store.get<Partial<Prefs>>("prefs", {}).updateChannel;
     const channel = chosen ?? (releases.find(release => release.tag_name === "v" + VERSION)?.prerelease ? "dev" : "stable");
     const newest = releases.filter(release => !release.draft && (channel === "dev" || !release.prerelease))[0], latest = newest?.tag_name?.replace(/^v/, "");
     this.update = {latest, available: !!latest && newerThan(latest, VERSION), channel, checkedAt: Date.now()};
