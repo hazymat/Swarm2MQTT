@@ -18,7 +18,7 @@ export function folderFiles(folder: string): Z2mFiles {
   return files;
 }
 // zip entries can sit inside a folder; keep just the file names we need
-export function pickFiles(entries: Z2mFiles): Z2mFiles {const files: Z2mFiles = {}; for (const [path, text] of Object.entries(entries)) {const name = path.split("/").pop()!; if (WANTED.test(name) && !(name in files)) files[name] = text} return files}
+export function pickFiles(entries: Z2mFiles): Z2mFiles {const files: Z2mFiles = {}; for (const [path, text] of Object.entries(entries)) {if (/(^|\/)log(-old)?\//.test(path)) continue; const name = path.split("/").pop()!; if (WANTED.test(name) && !(name in files)) files[name] = text} return files}
 
 export function readZ2m(files: Z2mFiles): Z2mImport {
   if (!files["configuration.yaml"]) throw new Error("That isn't a Zigbee2MQTT backup: there's no configuration.yaml in it.");
@@ -87,8 +87,8 @@ export async function fetchZ2mBackup(server: {url: string; username?: string; pa
   } finally {client.end(true)}
 }
 
-// Zigbee2MQTT's backup walks every file in its data folder (logs too, before leaving them out). A shortcut that loops back, or a folder with a huge number of files, overflows that walk.
+// Zigbee2MQTT's backup walks every file in its data folder recursively (logs too, before leaving them out). Hundreds of thousands of old log folders overflow that walk.
 function backupFailed(said?: string): string {
-  if (/call stack/i.test(said ?? "")) return `Zigbee2MQTT couldn't make its backup: something in its data folder trips it up. It reads every file there, old logs included, and a shortcut (symlink) or a folder with a huge number of files makes it give up. Move that out of its data folder and try again, or drop its files instead.`;
+  if (/call stack/i.test(said ?? "")) return `Zigbee2MQTT's data folder is too big for it to back up, usually because of old logs: it makes a new folder in data/log every time it starts and doesn't always clear them. Move its log and log-old folders out of the data folder (they aren't needed), then try again. Or drop its files instead.`;
   return `Zigbee2MQTT couldn't make its backup. It said: "${said ?? "no backup in its answer"}". Try again, or drop its files instead.`;
 }

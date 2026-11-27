@@ -2,7 +2,7 @@
 import {DatabaseSync} from "node:sqlite";
 import type {Control, Kind} from "./radio/radio.js";
 
-export const HISTORY_DAYS = 30;
+export const HISTORY_DAYS = 30, EVENTS_KEPT = 50000; // the log never outgrows this, however chatty the network
 export type Format = "json" | "values" | "both";
 export interface DeviceRow {ieee: string; name: string; topic: string; format: Format; renames: Record<string, string>; status: "waiting" | "accepted"; kind: Kind; model?: string; vendor?: string; description?: string; supported: boolean; controls: Control[]; hidden_controls: string[]; offline_after_override?: number; added_at: number; last_seen?: number; state: Record<string, unknown>; gaps: number[]; firmware?: string; update_available?: boolean}
 export interface EventRow {id: number; ts: number; ieee?: string; level: "info" | "warn" | "bad"; text: string; tech?: string}
@@ -76,5 +76,5 @@ CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forw
   markUndo(id: number, undone: boolean) {this.db.prepare("UPDATE undo SET undone=? WHERE id=?").run(undone ? 1 : 0, id)}
   undoList(limit = 50) {return this.db.prepare("SELECT id,ts,label,undone FROM undo ORDER BY id DESC LIMIT ?").all(limit)}
   // everything older than 30 days goes
-  prune() {const cutoff = Date.now() - HISTORY_DAYS * 864e5; for (const table of ["history", "links", "events", "undo"]) this.db.prepare(`DELETE FROM ${table} WHERE ts<?`).run(cutoff)}
+  prune() {const cutoff = Date.now() - HISTORY_DAYS * 864e5; for (const table of ["history", "links", "events", "undo"]) this.db.prepare(`DELETE FROM ${table} WHERE ts<?`).run(cutoff); this.db.prepare("DELETE FROM events WHERE id <= (SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET ?)").run(EVENTS_KEPT)}
 }
