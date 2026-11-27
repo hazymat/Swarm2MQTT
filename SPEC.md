@@ -286,6 +286,17 @@ Rejected: Plainbee, Zigview, Zigherd, ZigMQTT (and any Zig- name), BeeMQTT, Zigb
 - **Install:** Linux, Node service, one command; in-app Update now; dev and stable channels (§2).
 - **Not in v1:** Home Assistant discovery, a login for the web page (§9).
 
-## 13. Open questions
+## 13. Build status (0.1, 27 Nov 2026)
+
+Built: everything in §12, the setup wizard, Home (map with rewind, compare and ghost routes; list; device panel with route strip, signal, check-ins, battery, MQTT, direct control, firmware), Groups with scenes, Activity linked to the map, Settings, simulator, install and update script, dev and stable releases.
+
+Not yet:
+- Tried on a real stick. The herdsman side compiles and handles a missing stick, but nothing has paired through it yet.
+- Channel scan: herdsman has no energy scan for every stick, so a new network uses channel 20 unless a scan result exists.
+- Your changes: undo and redo go back in order; undoing one older entry on its own comes later.
+- Dragging rows into your own order (the map nodes and the phone bar already drag).
+- Zigbee2MQTT import reads a folder on the same machine; uploading it from the browser comes later.
+
+## 14. Open questions
 
 None right now.

@@ -1,0 +1,36 @@
+{
+  "name": "swarm2mqtt",
+  "version": "0.1.0",
+  "description": "Zigbee2MQTT, but sensible.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "swarm2mqtt": "dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p . && vite build ui",
+    "start": "node dist/main.js",
+    "sim": "node dist/main.js --sim --data ./data-sim",
+    "dev:ui": "vite ui",
+    "test": "node --test --test-force-exit dist/test/*.test.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.16.1",
+    "ws": "^8.18.0",
+    "yaml": "^2.6.0",
+    "zigbee-herdsman": "^11.2.5",
+    "zigbee-herdsman-converters": "^26.137.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.2",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "aedes": "^1.2.0",
+    "svelte": "^5.59.2",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0"
+  }
+}

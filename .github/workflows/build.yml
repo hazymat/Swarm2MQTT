@@ -1,0 +1,41 @@
+name: Build
+on:
+  push: {branches: [main]}
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      stable_version: {description: "Dev version to promote to stable, e.g. 0.1.12", required: true}
+permissions: {contents: write}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm}
+      - name: No AI attribution
+        run: "! git log -1 --format=%B | grep -qiE 'co-authored-by: *claude|generated with|anthropic'"
+      - run: npm ci
+      - name: Version
+        if: github.event_name != 'workflow_dispatch'
+        run: npm version --no-git-tag-version "0.1.${{ github.run_number }}"
+      - run: npm run build
+      - run: npm test
+      - name: Package
+        if: github.event_name == 'push'
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          tar -czf "swarm2mqtt-v$version.tar.gz" dist package.json package-lock.json scripts LICENSE README.md
+      - name: Dev release
+        if: github.event_name == 'push'
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: gh release create "v$VERSION" "swarm2mqtt-v$VERSION.tar.gz" --prerelease --title "$VERSION (dev)" --notes "Dev build from ${GITHUB_SHA::7}." --target "$GITHUB_SHA"
+  stable:
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Promote dev build to stable
+        env: {GH_TOKEN: "${{ github.token }}", V: "${{ inputs.stable_version }}"}
+        run: gh release edit "v$V" --repo "$GITHUB_REPOSITORY" --prerelease=false --latest --title "$V"
