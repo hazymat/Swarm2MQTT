@@ -64,7 +64,7 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 | P26 | **Groups that make sense** | "What is a group? Why might I want one?" | Groups page leads with "Turn several lights on together, instantly, with no popcorn effect." Creating one starts from selecting devices on the map. |
 | P27 | **Four menu items, not fourteen** | Eight top items + cog + sub-tabs + sub-sub-tabs | Home, Groups, Activity, Settings: a sidebar on a computer, a bar at the bottom on a phone. No second row of tabs anywhere. |
 | P28 | **Advanced stays out of the way** | Blocklist, adapter delay, extended PAN ID next to everyday settings | Niche options live under one collapsed "Advanced" section at the bottom of Settings. |
-| P29 | **Looks like it was designed** | "Crappy looking UI" | Built on the same look and behaviour as Sift and Quizaroo (§3.0). Mockups approved by Mat before any UI is built. |
+| P29 | **Looks like it was designed** | "Crappy looking UI" | A consistent look and behaviour (§3.0). Mockups approved by Mat before any UI is built. |
 
 ### Everything you had before
 
@@ -93,8 +93,8 @@ Swarm2MQTT service (Node + TypeScript, always running)
 - **The store is the source of truth for the UI**, not herdsman's live state. That's what makes P14 possible.
 - **Settings live in the store**, edited through the UI. Export/import as JSON (or YAML, same content).
 - Runs on Linux as a Node service under systemd, installed with one command. No Docker in v1.
-- Updates: an in-app **Update now** button pulls GitHub releases. Two channels like WinSqueeze: every merge to main is a dev build, a chosen dev build is promoted to stable.
-- Same front-end stack and DESIGN.md as WinSqueeze.
+- Updates: an in-app **Update now** button pulls GitHub releases. Two channels: every merge to main is a dev build, a chosen dev build is promoted to stable.
+- Front end: Svelte 5 page built with Vite, served by the service.
 
 **Challenge considered and rejected:** just writing a new front end for Zigbee2MQTT. Z2M does allow custom front ends, but the UI would still vanish when the adapter goes (P14), YAML would still exist (P16), per-device formats (P19) need changes inside Z2M. Building on the two libraries Z2M itself uses gets all of that and keeps device support.
 
@@ -102,23 +102,23 @@ Swarm2MQTT service (Node + TypeScript, always running)
 
 ## 3. Screens
 
-### 3.0 Look and behaviour: the same as Sift and Quizaroo
+### 3.0 Look and behaviour
 
-Swarm2MQTT follows the shared UI rules for every app: https://github.com/hazymat/sift/blob/main/docs/ui-consistency.md#rules-for-every-app. Where those and this list are silent, do what the rest of that doc says. A change here that adds or alters a shared pattern updates that section in the same piece of work.
+Swarm2MQTT follows the shared UI rules linked from AGENTS.md.
 
 Applied here:
 
-- **Look:** Quizaroo's Glass theme (and its Light theme): navy gradient, glass cards with soft borders and big rounded corners, pastel tinted pills, light-weight page title with its icon, 👁 View and ⋯ top right, a round + top right (here: Add devices).
-- **Frame:** sidebar on a computer (Home, Groups, Activity, Settings at the bottom), each with its own pastel tint when active. On a phone the same four sit in a bar at the bottom, re-ordered by press, hold and drag as in Sift.
+- **Look:** a Glass theme (and a Light theme): navy gradient, glass cards with soft borders and big rounded corners, pastel tinted pills, light-weight page title with its icon, 👁 View and ⋯ top right, a round + top right (here: Add devices).
+- **Frame:** sidebar on a computer (Home, Groups, Activity, Settings at the bottom), each with its own pastel tint when active. On a phone the same four sit in a bar at the bottom, re-ordered by press, hold and drag.
 - **Undo everything:** every change shows a pill at the bottom with what happened, **Undo**, and a small doughnut that empties as its time runs out. Ctrl+Z / Ctrl+Shift+Z undo and redo after the pill has gone. Activity keeps the whole history, each entry with its own Undo.
 - **Changes that reach a device are undone for real:** a rename, group, MQTT topic or device setting is put back on the device.
 - **Everything can be undone, removing a device included.** While its pill's doughnut runs, nothing has left yet, so Undo is instant. After that (Ctrl+Z or History), Undo can't bring a device back on its own, so it says so and helps: "Kitchen sensor has left the network. To bring it back, put it in pairing mode: hold its button for 5 seconds." Adding devices opens by itself with the beacon and a countdown, the device's own pairing tip is shown, and when that same device rejoins its name, room, groups, MQTT settings and map position come back automatically. If it doesn't appear before the countdown ends: "Didn't hear from it. Try again" with one button.
 - **Choosing several:** press and hold a device (in the list or on the map) to choose it: an accent ring around it, and the selection bar rises at the bottom. While any are chosen, a tap adds or removes one; Shift+click a run. Ctrl/⌘+click with a mouse.
-- **Selection bar** (Sift's): ✕ Esc first, the count, then actions with their keys: Add to group, Fix, Remove D. Toasts stack above it, never under.
+- **Selection bar**: ✕ Esc first, the count, then actions with their keys: Add to group, Fix, Remove D. Toasts stack above it, never under.
 - **Dragging:** hold a device row: it wiggles, lifts with a shadow and a slight tilt, the others slide aside, and a dashed slot shows where it lands. The list keeps Your order. On the map, dragging a device moves it and the map remembers where.
 - **Keys:** shown on buttons (hidden on touch screens). ↑ ↓ move through the list, Enter opens, Esc closes, / searches, J opens Add devices.
 - **Phone:** Home has Map | Devices as underlined tabs. Tapping a device opens its page; swipe sideways to go back.
-- **Hints:** first-run callouts with their own ✕ (Sift's `hintHtml`), never paragraphs of help text.
+- **Hints:** first-run callouts with their own ✕, never paragraphs of help text.
 
 ### 3.1 Setup wizard (first run, or Settings > Start again)
 1. **MQTT first**, because it's also how Swarm2MQTT asks Zigbee2MQTT for its network. Address, user, password; a green tick when it connects, plus any Zigbee2MQTT found there (version, topic, running or stopped, its adapter). Skip allowed.

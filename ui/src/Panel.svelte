@@ -1,5 +1,5 @@
 <script>
-  // Settings panel, as in Quizaroo: title and a one-line status; tap to open; which ones are open is remembered on this device
+  // Settings panel: title and a one-line status; tap to open; which ones are open is remembered on this device
   import {save} from "./ui.svelte.js";
   let {key, title, status = "", tone = "", id = undefined, children} = $props(); // tone "bad": opens by itself, so a fault is never hidden
   const remembered = (() => {try {return JSON.parse(localStorage.getItem("s2m-panels")) ?? {}} catch {return {}}})();

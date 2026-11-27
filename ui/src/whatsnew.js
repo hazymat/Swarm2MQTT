@@ -3,7 +3,7 @@
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
   {id: 22, text: "Setup from Zigbee2MQTT says it keeps Zigbee2MQTT's MQTT topic, so whatever listens carries on, and that you can change it later in Settings > MQTT."},
-  {id: 21, text: "Settings is now a set of panels, as in Quizaroo: each shows how it stands at a glance and opens with a tap. One with a problem opens by itself.", go: "settings"},
+  {id: 21, text: "Settings is now a set of panels: each shows how it stands at a glance and opens with a tap. One with a problem opens by itself.", go: "settings"},
   {id: 20, text: "Devices already on your network that Swarm2MQTT didn't know about (for example ones missing from Zigbee2MQTT's list) are found when they're heard, set up, and wait for you in Waiting for you.", go: "home"},
   {id: 19, text: "Adding devices: each new device shows its steps (joined, got the key, said what it is, make and model, ready), its signal in dBm, and if it stops, why and what to do. Swarm2MQTT retries by itself each time it hears from it.", go: "home"},
   {id: 18, text: "Join near: open joining on one plugged-in device, so a device you can't move (like a radiator valve) joins through the plug nearest to it.", go: "home"},
