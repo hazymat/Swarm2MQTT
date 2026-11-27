@@ -1,4 +1,4 @@
-# Swarm2MQTT: spec (draft 5, 27 Nov 2026)
+# Swarm2MQTT: spec (draft 6, 27 Nov 2026)
 
 **Swarm2MQTT**. A replacement for Zigbee2MQTT that you never have to understand Zigbee to use.
 
@@ -31,8 +31,8 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 |---|---|---|---|
 | P9 | **Your whole network on one screen** | Devices, Map, Dashboard are three separate pages | Home shows map, device list and the selected device's controls together. |
 | P10 | **Control devices from the same place you see them** | State and control buried in a device sub-page | Clicking a device on the map or list opens its panel with live state and controls. |
-| P11 | **The details that matter, the rest tucked away** | IEEE address as a main column | List shows picture, name, room, signal, battery, last heard. IEEE, network address, model code sit under "Details". |
-| P12 | **Big networks stay readable** | "If there are gazillions of devices this won't work" | Over ~60 devices the map groups by room and expands on click. The list works at any size. |
+| P11 | **The details that matter, the rest tucked away** | IEEE address as a main column | List shows picture, name, signal, battery, last heard. IEEE, network address, model code sit under "Details". |
+| P12 | **Big networks stay readable** | "If there are gazillions of devices this won't work" | Over ~60 devices the map folds battery devices into their router and expands on click. The list works at any size. |
 | P13 | **Pictures of every device** | "I do like the little picture" | Keep device pictures (§8). |
 
 ### Never stuck
@@ -111,10 +111,10 @@ Applied here:
 - **Look:** Quizaroo's Glass theme (and its Light theme): navy gradient, glass cards with soft borders and big rounded corners, pastel tinted pills, light-weight page title with its icon, 👁 View and ⋯ top right, a round + top right (here: Add devices).
 - **Frame:** sidebar on a computer (Home, Groups, Activity, Settings at the bottom), each with its own pastel tint when active. On a phone the same four sit in a bar at the bottom, re-ordered by press, hold and drag as in Sift.
 - **Undo everything:** every change shows a pill at the bottom with what happened, **Undo**, and a small doughnut that empties as its time runs out. Ctrl+Z / Ctrl+Shift+Z undo and redo after the pill has gone. Activity keeps the whole history, each entry with its own Undo.
-- **Changes that reach a device are undone for real:** a rename, room, group, MQTT topic or device setting is put back on the device.
+- **Changes that reach a device are undone for real:** a rename, group, MQTT topic or device setting is put back on the device.
 - **Everything can be undone, removing a device included.** While its pill's doughnut runs, nothing has left yet, so Undo is instant. After that (Ctrl+Z or History), Undo can't bring a device back on its own, so it says so and helps: "Kitchen sensor has left the network. To bring it back, put it in pairing mode: hold its button for 5 seconds." Adding devices opens by itself with the beacon and a countdown, the device's own pairing tip is shown, and when that same device rejoins its name, room, groups, MQTT settings and map position come back automatically. If it doesn't appear before the countdown ends: "Didn't hear from it. Try again" with one button.
 - **Choosing several:** press and hold a device (in the list or on the map) to choose it: an accent ring around it, and the selection bar rises at the bottom. While any are chosen, a tap adds or removes one; Shift+click a run. Ctrl/⌘+click with a mouse.
-- **Selection bar** (Sift's): ✕ Esc first, the count, then actions with their keys: Add to group, Move to room ▸, Fix, Remove D. Toasts stack above it, never under.
+- **Selection bar** (Sift's): ✕ Esc first, the count, then actions with their keys: Add to group, Fix, Remove D. Toasts stack above it, never under.
 - **Dragging:** hold a device row: it wiggles, lifts with a shadow and a slight tilt, the others slide aside, and a dashed slot shows where it lands. The list keeps Your order. On the map, dragging a device moves it and the map remembers where.
 - **Keys:** shown on buttons (hidden on touch screens). ↑ ↓ move through the list, Enter opens, Esc closes, / searches, J opens Add devices.
 - **Phone:** Home has Map | Devices as underlined tabs. Tapping a device opens its page; swipe sideways to go back.
@@ -122,21 +122,27 @@ Applied here:
 
 ### 3.1 Setup wizard (first run, or Settings > Start again)
 1. **Your stick.** Lists plugged-in sticks by name ("Sonoff ZBDongle-E"). One click. "Mine isn't listed" shows unplug/replug hint.
-2. **Coming from Zigbee2MQTT?** Yes: point at its folder, we import network, devices, names and rooms (P31). No: create a new network (keys generated, never shown).
+2. **Coming from Zigbee2MQTT?** Yes: point at its folder, we import network, devices, names and groups (P31). No: create a new network (keys generated, never shown).
 3. **MQTT.** Server address, user, password, with a live "Connected" tick. "Skip, I don't use MQTT" allowed.
 4. **Done.** Lands on Home with "Add devices" glowing if the network is empty.
 
 ### 3.2 Home
-- **Left: map.** Stick in the centre, routers as squares, battery devices as circles, lines for "talks through". Line thickness = signal. Problems use the status colours. Drag to rearrange, positions remembered. Toggle to a room layout.
-- **Right: list.** Picture, name, room, signal bars, battery, last heard. Sorted problems-first. Search box. Clicking a row highlights it on the map and vice versa.
+- **Left: map.** Stick in the centre, routers as squares, battery devices as circles, lines for "talks through". Line thickness = signal. Problems use the status colours. Drag to rearrange, positions remembered. No rooms or floor plans: the map is the radio map.
+- **Rewind:** ◀ ▶ under the map hop to the previous or next mesh change, with its time. **Compare** overlays that moment on now: routes that went are dashed, new ones solid with a halo. Route discovery listens to normal traffic and rejoins, plus a full scan every 6 hours and on demand.
+- **Route switches live:** the line slides to the new router and a faint dashed ghost of the old route fades over a day. Clicking the ghost says what changed and when.
+- **Right: list.** Picture, name, signal bars, battery, last heard. Sorted problems-first. Search box. Clicking a row highlights it on the map and vice versa.
 - **Bottom/side: device panel** for the selected device (3.3).
 - **Header:** network status pill ("All good" / "2 need a look"), Add devices button.
 
 ### 3.3 Device panel
-- Picture, name (click to rename), room.
+- Picture, name (click to rename). A new device keeps its model name until renamed.
 - **Controls** generated from the device library: switches, sliders, colour, readings.
 - **Health line:** "Fine", or the reason and one Fix button (§5).
 - **How it connects:** "Talks through Hall plug → stick". Plain words, mirrors the map.
+- **Route strip:** 30 days as a bar, one segment per router it used, gaps where offline; every colour named on tap. Tap a point to rewind the map there.
+- **Signal graph:** each link's quality over 30 days.
+- **Check-ins:** what was learnt, e.g. "Usually reports every 12 min (learnt over 9 days). Counted offline after 40 min of silence." Small chart of recent gaps. "Learning…" with the fallback times until enough check-ins. Override allowed, undoable.
+- **Settings:** the common few first, the rest under More.
 - **MQTT** card: topic, format (§6).
 - **Details** (collapsed): IEEE, network address, model code, firmware, raw last message, Remove.
 - Firmware update offer appears here when available (replaces Z2M's OTA page).
@@ -152,14 +158,14 @@ Applied here:
 Empty state explains with one image and one sentence (P26). Create = select devices on the map, "Make a group". Group gets its own controls and MQTT topic.
 
 ### 3.6 Activity
-Plain-English timeline ("Kitchen sensor went quiet. Hall plug was switched off at 14:02."). Filter by device. "Technical log" toggle shows the raw log for forum posts, with Copy.
+Plain-English timeline ("Kitchen sensor went quiet. Hall plug was switched off at 14:02."), kept 30 days like all history. Filter by device. Linked to the map both ways: tapping an entry rewinds the map to that moment, hopping the map scrolls the log to match. "Technical log" toggle shows the raw log for forum posts, with Copy.
 
 ### 3.7 Settings (one page of cards, top to bottom)
 1. MQTT
 2. Zigbee stick (status, change stick, backup network)
-3. Rooms
-4. Updates (app and device library)
-5. Export / import settings
+3. Updates (app and device library)
+4. Export / import settings
+5. Anonymous stats (off): opt in to send device models and stick type only, with a preview of exactly what's sent
 6. Advanced (collapsed): channel, blocklist/passlist, Touchlink, adapter delay, extended PAN ID, Green Power, network key backup.
 
 ---
@@ -270,6 +276,11 @@ Rejected: Plainbee, Zigview, Zigherd, ZigMQTT (and any Zig- name), BeeMQTT, Zigb
 - **Import without re-pairing:** Zigbee2MQTT only.
 - **Base topic:** a setting, default `swarm2mqtt` (§6).
 - **Monitoring:** retained bridge state with last will, and a heartbeat on `<base>/bridge/tele` (§6). Nothing else is needed to watch it.
+- **Scenes:** set devices how you like, Save as scene; recall from the page, a switch or MQTT. Undoable.
+- **Groups** stay (one command reaches many devices at once). No rooms, no floor plans.
+- **Notifications:** none of its own. Problems show on the page and go out on `<base>/bridge/event`; your own tools notify you.
+- **Offline** is learnt per device and shown (§3.3).
+- **Stats:** opt-in only (§3.7).
 - **Install:** Linux, Node service, one command; in-app Update now; dev and stable channels (§2).
 - **Not in v1:** Home Assistant discovery, a login for the web page (§9).
 
