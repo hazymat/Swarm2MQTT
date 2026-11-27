@@ -31,7 +31,7 @@ export function startWeb(app: App, port: number, uiDir: string) {
   app.on("toast", toast => all({t: "toast", toast}));
   app.on("rejoin", data => all({t: "rejoin", data}));
   sockets.on("connection", socket => {
-    app.checkUpdateSoon();
+    app.checkUpdateSoon(); app.viewerJoined(); socket.on("close", () => app.viewerLeft());
     send(socket, {t: "snapshot", data: app.snapshot()});
     socket.on("message", async raw => {
       let message: any; try {message = JSON.parse(String(raw))} catch {return}

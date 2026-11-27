@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 32, text: "While the page is open, the map checks itself every 5 minutes, and as soon as you open it if the last check is older than that. Check now is only needed if you can't wait.", go: "home"},
   {id: 31, text: "Undo history: Activity > Undo history (also in Settings) lists your changes. Click one to go back to before it, or an undone one to bring it back. Ctrl+Z undoes, Ctrl+Y redoes, and both say so when there's nothing left.", go: "history"},
   {id: 30, text: "Every button shows it was pressed and pulses while it waits. If a device takes a while, it says what it's waiting for, and for a battery device, to press its button to wake it. Group and scene buttons check each light afterwards and say which ones didn't change. Firmware only shows on devices that can take updates.", go: "home"},
   {id: 29, text: "With an Ember adapter, the map keeps itself up to date from normal traffic: when a device starts talking through a different plug, the map changes straight away, without a check. A plug that misses a check is asked again 30 seconds later, and if it still doesn't answer, its routes stay on the map, dashed, as last known.", go: "home"},

@@ -13,7 +13,7 @@ import {translate} from "./errors.js";
 
 const newerThan = (candidate: string, current: string) => {const left = candidate.split(".").map(Number), right = current.split(".").map(Number); for (let index = 0; index < 3; index++) if ((left[index] ?? 0) !== (right[index] ?? 0)) return (left[index] ?? 0) > (right[index] ?? 0); return false};
 export const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
-const LINK_SCAN_MS = 6 * 3600e3, BACKUPS_KEPT = 14, REJOIN_SECONDS = 180;
+const LINK_SCAN_MS = 6 * 3600e3, WATCHED_SCAN_MS = 5 * 60e3, BACKUPS_KEPT = 14, REJOIN_SECONDS = 180;
 export interface Prefs {batteryLeadDays: number; batteryPercent: number; stats: boolean; updateChannel: "stable" | "dev"}
 const DEFAULT_PREFS: Prefs = {batteryLeadDays: 21, batteryPercent: 10, stats: false, updateChannel: "stable"};
 export type Op = {op: "device"; ieee: string; fields: Partial<DeviceRow>} | {op: "setting"; key: string; value: unknown} | {op: "group"; group: GroupRow | null; id: number} | {op: "scene"; scene: any; id: number} | {op: "bind"; from: string; to: string; remove: boolean} | {op: "rejoin"; row: DeviceRow} | {op: "remove"; ieee: string} | {op: "values"; ieee: string; values: Record<string, unknown>};
@@ -208,7 +208,16 @@ export class App extends EventEmitter {
     }
     if (changed) {for (const link of byChild.values()) if (link.seen >= latest.ts) link.seen = now; /* still current, not carried over */ this.store.saveLinks(Array.from(byChild.values()), now); this.changed()}
   }
-  scheduleScan(delay = LINK_SCAN_MS) {clearTimeout(this.scanTimer); this.scanTimer = setTimeout(() => this.scanNow().finally(() => {const soon = this.scanSoon; this.scanSoon = false; this.scheduleScan(soon ? 120e3 : LINK_SCAN_MS)}), delay)} // devices found during a check get their own links drawn 2 minutes later
+  // the map is checked every 6 hours, every 5 minutes while someone has the page open, and 2 minutes after devices turn up during a check
+  viewers = 0;
+  scheduleScan(delay = LINK_SCAN_MS) {clearTimeout(this.scanTimer); this.scanTimer = setTimeout(() => this.scanNow().catch(() => {}).finally(() => {const soon = this.scanSoon; this.scanSoon = false; this.scheduleScan(soon ? 120e3 : this.viewers ? WATCHED_SCAN_MS : LINK_SCAN_MS)}), delay)}
+  viewerJoined() {
+    this.viewers++;
+    if (this.viewers > 1 || this.scan.running || !this.radioStatus.up || Date.now() - (this.networkUpAt ?? 0) < 60e3) return; // the first check after start waits for the network to settle
+    const last = this.scan.finishedAt ?? this.store.get<number>("lastScan", 0);
+    this.scheduleScan(Math.max(3000, last + WATCHED_SCAN_MS - Date.now()));
+  }
+  viewerLeft() {this.viewers = Math.max(0, this.viewers - 1)}
   async scanNow() {
     if (!this.radio || !this.radioStatus.up) throw new Error("The adapter isn't connected, so there's no one to ask.");
     if (this.scan.running) return {already: true};
