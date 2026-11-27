@@ -1,6 +1,6 @@
 <script>
   import {live, undo, redo, act} from "./api.svelte.js";
-  import {view, go, save} from "./ui.svelte.js";
+  import {view, go, save, seeHint} from "./ui.svelte.js";
   import {inField, adapterState} from "./util.js";
   import Icon from "./Icon.svelte";
   import Home from "./Home.svelte";
@@ -12,6 +12,7 @@
   import JoinPill from "./JoinPill.svelte";
   import UpdateBar from "./UpdateBar.svelte";
   import StatusBar from "./StatusBar.svelte";
+  import {isIOS, isStandalone} from "./install.svelte.js";
   import WhatsNew from "./WhatsNew.svelte";
   import {LATEST_ID} from "./whatsnew.js";
   import {call} from "./api.svelte.js";
@@ -75,6 +76,7 @@
       {#if view.page === "groups"}<button class="plus" title="New group" onclick={() => act("groupCreate", {name: "New group", members: view.chosen})}><Icon name="plus"/></button>{/if}
     </header>
     {#if snap.sim}<div class="simbar">Simulator: no real adapter. Devices and messages are made up, and time runs 60x faster.</div>{/if}
+    {#if isIOS() && !isStandalone() && !view.hintsSeen.includes("homescreen") && view.page !== "settings"}<div class="homehint"><span>Put Swarm2MQTT on your Home Screen and it opens full screen, like an app.</span><button class="link" onclick={() => {seeHint("homescreen"); go("settings"); setTimeout(() => document.querySelector("#homescreen-card")?.scrollIntoView({block: "start"}), 300)}}>How</button><button class="x" title="Don't show again" onclick={() => seeHint("homescreen")}><Icon name="close" small/></button></div>{/if}
     <main class="content">
       {#if view.page === "groups"}<Groups/>
       {:else if view.page === "activity" || view.page === "history"}<Activity/>
@@ -104,12 +106,17 @@
   .status .sub{color:var(--muted)}
   .pulse{animation:pulse 1.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.3}}
   .plus:disabled{opacity:.4}
+  .homehint{display:flex;align-items:center;gap:10px;margin:10px 16px 0;padding:9px 12px;font-size:14px;background:var(--glass);border:1px solid var(--active-border);border-radius:12px}.homehint span{flex:1}.homehint .x{padding:2px;color:var(--muted)}
   .simbar{padding:6px 24px;font-size:13px;color:var(--muted);background:color-mix(in srgb,var(--lilac) 12%,transparent);border-bottom:1px solid var(--glass-border)}
   .content{flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto}
   @media (max-width:700px){
-    #sidebar{inset:auto 0 var(--status-h) 0;width:auto;flex-direction:row;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:6px 12px calc(10px + env(safe-area-inset-bottom));background:var(--bar);border-right:0;border-top:1px solid var(--glass-border)}
+    /* phone: a plain bar like a native tab bar; the current page has a soft blue fill, the buttons sit a little into the home-bar area */
+    #sidebar{inset:auto 0 var(--status-h) 0;width:auto;flex-direction:row;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px 8px calc(6px + max(0px, env(safe-area-inset-bottom) - 18px));background:color-mix(in srgb,var(--bg) 88%,transparent);border-right:0;border-top:1px solid var(--glass-border)}
     #wordmark{display:none}
-    .nav-item{flex-direction:column;gap:2px;padding:5px;font-size:12px;text-align:center}
+    .nav-item{position:relative;flex-direction:column;gap:2px;min-width:0;padding:6px 2px;border:1px solid transparent;border-radius:12px;font-size:.7rem;font-weight:400;text-align:center}
+    .nav-item.active{background:var(--active-bg);border-color:var(--active-border);color:var(--text)}
+    .nav-item:hover:not(.active){background:none}
+    .nav-item::after{content:"";position:absolute;left:-2px;right:-2px;top:-7px;bottom:calc(-7px - max(0px, env(safe-area-inset-bottom) - 18px))} /* a tap just under a button still opens it */
     .nav-item.settings{margin-top:0}
     #page{margin-left:0;height:auto;min-height:100vh}
     #topbar{padding:10px 16px}

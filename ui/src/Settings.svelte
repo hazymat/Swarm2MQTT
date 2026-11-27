@@ -5,8 +5,11 @@
   import {readBackupFiles} from "./z2mzip.js";
   import AddressField from "./AddressField.svelte";
   import Panel from "./Panel.svelte";
+  import HomeScreen from "./HomeScreen.svelte";
+  import {isIOS, isStandalone, isPhone} from "./install.svelte.js";
   const MQTT_KINDS = [{label: "mqtt://", scheme: "mqtt", port: 1883}, {label: "mqtts://", scheme: "mqtts", port: 8883}];
   const ADAPTER_KINDS = [{label: "Network", scheme: "tcp", port: 6638}, {label: "USB", path: true, placeholder: "/dev/ttyUSB0"}];
+  const onHomeScreen = isStandalone(), homeScreenFirst = !onHomeScreen && (isIOS() || isPhone()); // not installed on a phone: offered first
   let snap = $derived(live.snap), adapter = $derived(adapterState(snap.radio));
   let mqtt = $state(Object.assign({}, live.snap.mqtt.settings));
   let prefs = $state(Object.assign({}, live.snap.prefs));
@@ -16,7 +19,11 @@
   let statsPreview = $derived({version: snap.version, adapter: snap.radio.stick, models: Array.from(new Set(snap.devices.map(device => device.model).filter(Boolean))).sort()});
   function exportSettings() {const data = {exported: new Date().toISOString(), version: snap.version, mqtt: Object.assign({}, snap.mqtt.settings, {password: undefined}), prefs: snap.prefs, devices: snap.devices.map(device => ({ieee: device.ieee, name: device.name, description: device.note, topic: device.topic, format: device.format, renames: device.renames})), groups: snap.groups, scenes: snap.scenes}; const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type: "application/json"})); link.download = "swarm2mqtt-settings.json"; link.click()}
 </script>
+{#snippet homeScreen()}
+  <Panel key="homescreen" id="homescreen-card" title="Home Screen" status={onHomeScreen ? "✓ Opens as an app" : "Not added yet"} tone={onHomeScreen ? "ok" : homeScreenFirst ? "blue" : ""}><HomeScreen/></Panel>
+{/snippet}
 <div class="settings">
+  {#if homeScreenFirst}{@render homeScreen()}{/if}
   <Panel key="mqtt" title="MQTT" status={snap.mqtt.connected ? `✓ Connected to ${(snap.mqtt.settings.url ?? "").replace(/^\w+:\/\//, "")}` : snap.mqtt.error ?? (snap.mqtt.settings.url ? "Connecting…" : "Not set up")} tone={snap.mqtt.connected ? "ok" : snap.mqtt.error ? "bad" : ""}>
     <div class="kv" id="mqtt-server"><span class="k">Server</span><div class="field"><AddressField bind:value={mqtt.url} kinds={MQTT_KINDS}/><div class="fieldhint">The port is usually 1883 (8883 for mqtts).</div></div></div>
     <div class="kv"><span class="k">User</span><input class="text" bind:value={mqtt.username} autocomplete="off"></div>
@@ -58,6 +65,8 @@
     {#each snap.undo.slice(0, 3) as entry (entry.id)}<div class="kv"><span class:faint={entry.undone}>{entry.label}</span><span class="faint">{dayClock(entry.ts)}</span></div>{/each}
     <button class="pill ghost" onclick={() => go("history")}>Open undo history</button>
   </Panel>
+
+  {#if !homeScreenFirst}{@render homeScreen()}{/if}
 
   <Panel key="export" title="Export" status="Settings as a JSON file">
     <button class="pill ghost" onclick={exportSettings}>Download settings (JSON)</button>
