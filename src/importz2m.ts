@@ -55,22 +55,34 @@ export function writeZ2mFiles(files: Z2mFiles, dataDir: string) {
 }
 // Ask a running Zigbee2MQTT for its backup over MQTT (what its web page's backup button does): the data folder as a zip.
 // Read only: Zigbee2MQTT keeps running and keeps the adapter.
+export const BACKUP_WAIT_SECONDS = 120;
 export async function fetchZ2mBackup(server: {url: string; username?: string; password?: string}, baseTopic = "zigbee2mqtt"): Promise<Z2mFiles> {
   const {default: mqtt} = await import("mqtt"), {unzipSync} = await import("fflate");
   const client = mqtt.connect(server.url, {username: server.username || undefined, password: server.password || undefined, reconnectPeriod: 0, connectTimeout: 8000});
+  // what Zigbee2MQTT logs while it makes the backup, so a failure can say what it said
+  const said: string[] = [], answered = {health: false};
   try {
     const zip = await new Promise<string>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`Zigbee2MQTT didn't answer. Check it's running, and that its topic is ${baseTopic}.`)), 25000);
+      const timer = setTimeout(async () => {
+        answered.health = false; client.publish(`${baseTopic}/bridge/request/health_check`, "");
+        await new Promise(wait => setTimeout(wait, 3000));
+        const heard = said.length ? ` Its last words: "${said.slice(-2).join(" / ")}".` : "";
+        reject(new Error(answered.health ? `Zigbee2MQTT is running but didn't send its backup within ${BACKUP_WAIT_SECONDS} seconds.${heard} Its data folder may be very large, or the backup got stuck. Try again, or drop its files instead.` : `Zigbee2MQTT stopped answering while making its backup.${heard} Check it's still running, then try again.`));
+      }, BACKUP_WAIT_SECONDS * 1000);
       client.on("error", error => {clearTimeout(timer); reject(new Error(`Couldn't connect to the MQTT server: ${error.message}`))});
-      client.on("message", (_topic, payload) => {
+      client.on("message", (topic, payload) => {
         let reply: any; try {reply = JSON.parse(payload.toString())} catch {return}
+        if (topic.endsWith("/health_check")) {answered.health = true; return}
+        if (topic.endsWith("/bridge/logging")) {if (/error|warn/.test(reply.level ?? "") || /backup/i.test(reply.message ?? "")) said.push(String(reply.message).slice(0, 200)); return}
         clearTimeout(timer);
-        if (reply.status === "ok" && reply.data?.zip) resolve(reply.data.zip); else reject(new Error(`Zigbee2MQTT said no: ${reply.error ?? "no backup in its answer"}`));
+        if (reply.status === "ok" && reply.data?.zip) resolve(reply.data.zip); else reject(new Error(`Zigbee2MQTT couldn't make its backup. It said: "${reply.error ?? "no backup in its answer"}". Try again, or drop its files instead.`));
       });
-      client.on("connect", () => client.subscribe(`${baseTopic}/bridge/response/backup`, () => client.publish(`${baseTopic}/bridge/request/backup`, "")));
+      client.on("connect", () => client.subscribe([`${baseTopic}/bridge/response/backup`, `${baseTopic}/bridge/response/health_check`, `${baseTopic}/bridge/logging`], () => client.publish(`${baseTopic}/bridge/request/backup`, "")));
     });
     const entries = unzipSync(Buffer.from(zip, "base64"), {filter: entry => WANTED.test(entry.name.split("/").pop() ?? "")}), files: Z2mFiles = {};
     for (const [name, bytes] of Object.entries(entries)) files[name] = Buffer.from(bytes).toString("utf8");
-    return pickFiles(files);
+    const picked = pickFiles(files);
+    if (!picked["configuration.yaml"] || !picked["database.db"]) throw new Error("Zigbee2MQTT's backup arrived, but without its settings or device list. Drop its files instead.");
+    return picked;
   } finally {client.end(true)}
 }

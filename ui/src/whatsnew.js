@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 11, text: "Setup: getting your network from Zigbee2MQTT waits up to 2 minutes with a running count. If it fails, the page keeps saying why, including what Zigbee2MQTT said, with Try again. Each step ends with one tidy row: Back on the left, the next action on the right. Problem pills now stay 12 seconds and have ✕."},
   {id: 10, text: "Update now stays on Updating… until the new version is running, then What's new opens. It no longer offers the update again for a moment in between."},
   {id: 9, text: "Setup, MQTT: a Zigbee2MQTT only counts as running if it answers right then. One that doesn't, but left its messages on your MQTT server, shows greyed out as an old install, with Remove its old messages."},
   {id: 8, text: "Boxes that need a format (MQTT server, adapter address, channel) now show it under the box, and it stays there while you type.", go: "settings", at: "#mqtt-server"},

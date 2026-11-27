@@ -19,12 +19,15 @@
   // 2 Zigbee2MQTT
   let from = $state(null), baseTopic = $state("zigbee2mqtt"), network = $state(null), chosen = $state([]), byFiles = $state(false), dragging = $state(false), files = null;
   let found = $derived(probe?.z2m.find(item => item.baseTopic === baseTopic && !item.leftBehind) ?? probe?.z2m.find(item => !item.leftBehind));
-  async function refreshProbe() {busy = true; try {probe = await call("mqttProbe", {})} catch (error) {toast(error.message, null, "bad")} busy = false}
+  async function refreshProbe() {busy = true; try {probe = await call("mqttProbe", {})} catch (error) {askError = error.message} busy = false}
   function gotNetwork(result) {network = result; files = result.files; chosen = result.devices.map(device => device.ieee); if (!path && result.adapterPath) path = result.adapterPath; if (result.adapterType) adapter = result.adapterType}
-  async function askZ2m() {busy = true; try {gotNetwork(await call("z2mFetch", {baseTopic}))} catch (error) {toast(error.message, null, "bad")} busy = false}
+  // asking can take a while (Zigbee2MQTT zips its whole data folder): count the seconds, and keep any failure on the page
+  let askError = $state(""), askStarted = $state(0);
+  async function askZ2m() {busy = true; askError = ""; askStarted = Date.now(); try {gotNetwork(await call("z2mFetch", {baseTopic}))} catch (error) {askError = error.message} busy = false; askStarted = 0}
   async function pickFiles(fileList) {
     if (!fileList?.length) return; busy = true;
-    try {const picked = await readBackupFiles(fileList), preview = await call("z2mPreview", {files: picked}); gotNetwork(Object.assign({files: picked}, preview))} catch (error) {toast(error.message, null, "bad")}
+    askError = "";
+    try {const picked = await readBackupFiles(fileList), preview = await call("z2mPreview", {files: picked}); gotNetwork(Object.assign({files: picked}, preview))} catch (error) {askError = error.message}
     busy = false;
   }
   const toggle = ieee => chosen = chosen.includes(ieee) ? chosen.filter(other => other !== ieee) : chosen.concat([ieee]);
@@ -39,17 +42,18 @@
       const result = await call("stickCheck", {path, adapter});
       if (from === "z2m" && snap.mqtt.settings.url) {const seen = await call("mqttProbe", {}).catch(() => null), z2m = seen?.z2m.find(item => item.baseTopic === baseTopic); if (z2m?.running) {result.checks.push({label: "Zigbee2MQTT", result: "bad", text: "is still running and using the adapter.", fix: "Stop it now (only one of them can use the adapter), then Check again."}); result.result = "bad"; result.headline = "Stop Zigbee2MQTT first"} else if (seen) result.checks.push({label: "Zigbee2MQTT", result: "ok", text: "has stopped."})}
       checks = result;
-    } catch (error) {toast(error.message, null, "bad")}
+    } catch (error) {finishError = error.message}
     busy = false;
   }
   function useSuggestion(suggest) {if (suggest.path) path = suggest.path; if (suggest.adapter) adapter = suggest.adapter; checkAdapter()}
+  let finishError = $state("");
   async function finish() {
-    busy = true;
+    busy = true; finishError = "";
     try {
       if (from === "z2m") await act("z2mImport", {files, path, adapter, keepBaseTopic: true, devices: chosen});
       else await act("newNetwork", {path, adapter});
       view.wizard = false;
-    } catch {}
+    } catch (error) {finishError = error.message}
     busy = false;
   }
 </script>
@@ -71,11 +75,12 @@
             {:else}<li class={item.running ? "ok" : "warn"}><span class="mark">{item.running ? "✓" : "!"}</span><div><b>Zigbee2MQTT {item.version}</b> on topic <code>{item.baseTopic}</code>: {item.running ? "running, and it answered just now" : "stopped"}{item.adapterPath ? `, using ${item.adapterPath}` : ""}.</div></li>{/if}
           {:else}<li class="ok"><span class="mark">✓</span><div>No Zigbee2MQTT on this server. That's fine for a new network.</div></li>{/each}
         </ul>
-        <div class="row"><button class="pill primary" onclick={() => step = 2}>Next</button><button class="link" onclick={connectMqtt}>Check again</button></div>
-      {:else}
-        {#if probeError}<div class="headline bad"><span class="big">✕</span>{probeError}</div>{/if}
-        <div class="row"><button class="pill primary" disabled={!mqtt.url || busy} onclick={connectMqtt}>{busy ? "Connecting…" : probeError ? "Try again" : "Connect"}</button><button class="link" onclick={() => step = 2}>Skip for now ›</button></div>
-      {/if}
+      {:else if probeError}<div class="headline bad"><span class="big">✕</span>{probeError}</div>{/if}
+      <div class="foot">
+        {#if probe}<span class="spacer"></span>{:else}<button class="quiet" onclick={() => step = 2}>Skip for now</button>{/if}
+        {#if probe}<button class="pill ghost" disabled={busy} onclick={connectMqtt}>{busy ? "Checking…" : "Check again"}</button><button class="pill primary" onclick={() => step = 2}>Next ›</button>
+        {:else}<button class="pill primary" disabled={!mqtt.url || busy} onclick={connectMqtt}>{busy ? "Connecting…" : probeError ? "Try again" : "Connect"}</button>{/if}
+      </div>
     </section>
   {:else if step === 2}
     <section class="card">
@@ -88,20 +93,24 @@
         {#if !byFiles && snap.mqtt.settings.url}
           {#if found?.running}
             <p>Swarm2MQTT asks Zigbee2MQTT {found.version} for a copy of its network, devices and groups. It keeps running, and nothing of it changes.</p>
-            <div class="row"><button class="pill primary" disabled={busy} onclick={askZ2m}>{busy ? "Asking Zigbee2MQTT…" : "Get my network from Zigbee2MQTT"}</button><button class="link" onclick={() => byFiles = true}>Or drop its files instead</button></div>
+            {#if askError}<div class="headline bad"><span class="big">✕</span><div>Didn't get your network<div class="why">{askError}</div></div></div>{/if}
+            <div class="actions"><button class="pill primary" disabled={busy} onclick={askZ2m}>{busy ? "Asking Zigbee2MQTT…" : askError ? "Try again" : "Get my network from Zigbee2MQTT"}</button>{#if askStarted}<span class="muted waiting">Zigbee2MQTT is making its backup… {Math.round((view.now - askStarted) / 1000)} s (it can take a minute)</span>{/if}</div>
+            <div class="alt">Can't use MQTT? <button onclick={() => byFiles = true}>Drop its files instead</button></div>
           {:else}
             <div class="headline warn"><span class="big">!</span>{found ? "Zigbee2MQTT is stopped" : "No Zigbee2MQTT on your MQTT server"}</div>
             <p class="muted">{found ? "Start it again for a minute, so it can hand over its network. You'll stop it again before the last step." : "Start it if it's stopped. If it uses its own topic, type it here."}</p>
             {#if !found}<label class="topic"><span class="muted">Zigbee2MQTT's topic</span><input class="text" bind:value={baseTopic}></label>{/if}
-            <div class="row"><button class="pill ghost" disabled={busy} onclick={refreshProbe}>{busy ? "Looking…" : "Check again"}</button>{#if !found}<button class="pill ghost" disabled={busy} onclick={askZ2m}>Ask anyway</button>{/if}<button class="link" onclick={() => byFiles = true}>Or drop its files instead</button></div>
+            <div class="actions"><button class="pill ghost" disabled={busy} onclick={refreshProbe}>{busy ? "Looking…" : "Check again"}</button>{#if !found}<button class="pill ghost" disabled={busy} onclick={askZ2m}>Ask anyway</button>{/if}</div>
+            <div class="alt">Can't use MQTT? <button onclick={() => byFiles = true}>Drop its files instead</button></div>
           {/if}
         {:else}
           <p>From Zigbee2MQTT's data folder, drop <b>configuration.yaml</b>, <b>database.db</b> and <b>coordinator_backup.json</b> here (and secret.yaml if you use one). A zip of the folder works too.</p>
+          {#if askError}<div class="headline bad"><span class="big">✕</span><div>Couldn't read those files<div class="why">{askError}</div></div></div>{/if}
           <label class="drop" class:dragging ondragover={event => {event.preventDefault(); dragging = true}} ondragleave={() => dragging = false} ondrop={event => {event.preventDefault(); dragging = false; pickFiles(event.dataTransfer.files)}}>
             <input type="file" multiple accept=".zip,.yaml,.db,.json" hidden onchange={event => pickFiles(event.currentTarget.files)}>
             {busy ? "Reading…" : "Drop the files here, or click to pick them"}
           </label>
-          {#if snap.mqtt.settings.url}<button class="link" onclick={() => byFiles = false}>‹ Ask Zigbee2MQTT over MQTT instead</button>{/if}
+          {#if snap.mqtt.settings.url}<div class="alt"><button onclick={() => byFiles = false}>Ask Zigbee2MQTT over MQTT instead</button></div>{/if}
         {/if}
       {/if}
       {#if from === "z2m" && network}
@@ -112,9 +121,9 @@
           <p class="muted small">Unticked devices stay on the network and wait in Waiting for you, sending nothing, until you accept them.</p>
         {/if}
         {#if network.groups?.length}<p class="muted small">Groups: {network.groups.join(", ")}</p>{/if}
-        <button class="link" onclick={() => {network = null; files = null}}>Get it again</button>
+        <div class="alt"><button onclick={() => {network = null; files = null}}>Get it again</button></div>
       {/if}
-      <div class="row"><button class="pill primary" disabled={!from || (from === "z2m" && !network)} onclick={() => step = 3}>Next</button><button class="link" onclick={() => step = 1}>‹ Back</button></div>
+      <div class="foot"><button class="quiet" onclick={() => step = 1}>‹ Back</button><button class="pill primary" disabled={!from || (from === "z2m" && !network)} onclick={() => step = 3}>Next ›</button></div>
     </section>
   {:else}
     <section class="card">
@@ -129,12 +138,17 @@
         <ul class="checks">
           {#each checks.checks as check}<li class={check.result}><span class="mark">{check.result === "ok" ? "✓" : check.result === "warn" ? "!" : "✕"}</span><div><b>{check.label}</b> {check.text}{#if check.fix}<div class="muted">{check.fix}</div>{/if}{#if check.suggest}<button class="link" onclick={() => useSuggestion(check.suggest)}>Use {check.suggest.path ?? (check.suggest.adapter === "zstack" ? "Z-Stack" : "Ember")}</button>{/if}</div></li>{/each}
         </ul>
-        <div class="row">
+      {/if}
+      {#if finishError}<div class="headline bad"><span class="big">✕</span><div>{from === "z2m" ? "Couldn't bring it over" : "Couldn't make the network"}<div class="why">{finishError}</div></div></div>{/if}
+      <div class="foot">
+        <button class="quiet" onclick={() => step = 2}>‹ Back</button>
+        {#if !checks}<button class="pill primary" disabled={!path || path.includes("<") || busy} onclick={checkAdapter}>{busy ? "Checking…" : "Check the adapter"}</button>
+        {:else}
           <button class="pill ghost" disabled={busy} onclick={checkAdapter}>{busy ? "Checking…" : "Check again"}</button>
-          {#if checks.result === "bad"}<button class="link" disabled={busy} onclick={finish}>Carry on anyway: {from === "z2m" ? "bring it over" : "make the network"} ›</button>
+          {#if checks.result === "bad"}<button class="pill ghost" disabled={busy} onclick={finish}>Carry on anyway</button>
           {:else}<button class="pill primary" disabled={busy} onclick={finish}>{from === "z2m" ? "Bring it over" : "Make the network"}</button>{/if}
-        </div>
-      {:else}<div class="row"><button class="pill primary" disabled={!path || path.includes("<") || busy} onclick={checkAdapter}>{busy ? "Checking…" : "Check the adapter"}</button><button class="link" onclick={() => step = 2}>‹ Back</button></div>{/if}
+        {/if}
+      </div>
     </section>
   {/if}
 </div>
@@ -153,6 +167,15 @@
   .two,.row{display:flex;gap:8px}
   .pill{align-self:flex-start}
   .link{color:var(--accent);align-self:flex-start}
+  /* every step ends with one footer: Back (or Skip) quiet on the left, actions on the right, all on one centre line */
+  .foot{display:flex;align-items:center;gap:10px;margin-top:6px;padding-top:16px;border-top:1px solid var(--glass-border)}
+  .foot .quiet,.foot .spacer{margin-right:auto}
+  .quiet{color:var(--muted);font-size:14.5px;padding:7px 4px}.quiet:hover{color:var(--text)}
+  .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .foot .pill,.actions .pill{align-self:auto}
+  .why{font-size:14px;font-weight:400;color:var(--muted);margin-top:4px}
+  .waiting{font-size:14px}
+  .alt{font-size:13.5px;color:var(--muted);margin-top:-4px}.alt button{color:var(--accent);font-size:13.5px}
   .headline{display:flex;align-items:center;gap:12px;font-size:17px;font-weight:500;padding:12px 14px;border-radius:14px;color:var(--text);background:color-mix(in srgb,var(--green) 14%,transparent);border:1px solid color-mix(in srgb,var(--green) 45%,transparent)}
   .headline.warn{background:color-mix(in srgb,var(--amber) 14%,transparent);border-color:color-mix(in srgb,var(--amber) 45%,transparent)}
   .headline.bad{background:color-mix(in srgb,var(--red) 14%,transparent);border-color:color-mix(in srgb,var(--red) 45%,transparent)}

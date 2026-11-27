@@ -28,9 +28,9 @@ export async function loadEvents() {try {live.events = await call("events", {lim
 export const undo = () => act("undo").catch(() => {});
 export const redo = () => act("redo").catch(() => {});
 
-// Bottom pills: 6 s with an action, 1.6 s without. A pill with `then` runs it when the doughnut runs out (for things that can't be undone for real).
+// Bottom pills: 6 s with an action, 1.6 s without; a problem stays 12 s with ✕, so it's never missed. A pill with `then` runs it when the doughnut runs out (for things that can't be undone for real).
 export function toast(label, action = undo, level = "info", then = null) {
-  const id = toastId++, ms = action || then ? 6000 : 1600, item = {id, label, action, level, ms, started: Date.now(), then};
+  const id = toastId++, ms = level === "bad" ? 12000 : action || then ? 6000 : 1600, item = {id, label, action, level, ms, started: Date.now(), then};
   live.toasts = live.toasts.concat([item]).slice(-3);
   item.timer = setTimeout(() => {dismiss(id); if (then) then()}, ms);
   return id;

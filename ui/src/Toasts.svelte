@@ -9,7 +9,8 @@
       <svg width="16" height="16" viewBox="0 0 16 16" style="transform:rotate(-90deg)"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--glass-hover)" stroke-width="2.6"/><circle class="ring" cx="8" cy="8" r="6.5" fill="none" stroke={item.level === "bad" ? "var(--red)" : "var(--accent)"} stroke-width="2.6" stroke-dasharray={CIRCLE} stroke-linecap="round" style="animation-duration:{item.ms}ms"/></svg>
       <span>{item.label}</span>
       {#if item.then}<button onclick={() => cancelPending(item.id)}>Undo</button>
-      {:else if item.action}<button onclick={() => {dismiss(item.id); item.action()}}>Undo<kbd>Ctrl Z</kbd></button>{/if}
+      {:else if item.action}<button onclick={() => {dismiss(item.id); item.action()}}>Undo<kbd>Ctrl Z</kbd></button>
+      {:else if item.level === "bad"}<button onclick={() => dismiss(item.id)} aria-label="Close">✕</button>{/if}
     </div>
   {/each}
 </div>
