@@ -53,5 +53,7 @@ UNIT
   systemctl daemon-reload; systemctl enable --now swarm2mqtt
   echo "Swarm2MQTT $tag is running: http://$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT"
 else
+  # run by hand as root: give the files back to the service and restart it (the app's own Update now restarts itself)
+  if [ "$(id -u)" = 0 ]; then chown -R "$USER_NAME:$USER_NAME" "$DIR"; systemctl restart swarm2mqtt; fi
   echo "Updated to $tag"
 fi
