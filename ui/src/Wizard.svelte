@@ -88,7 +88,7 @@
         <ul class="checks">
           {#each probe.z2m as item}
             {#if item.leftBehind}<li class="old"><span class="mark">?</span><div><b>Zigbee2MQTT {item.version}</b> on topic <code>{item.baseTopic}</code> isn't answering.<div class="muted">An old install left its messages on your MQTT server{item.adapterPath ? ` (it used ${item.adapterPath})` : ""}. Nothing is running there now.</div><button class="link" onclick={() => clearOld(item.baseTopic)}>Remove its old messages</button></div></li>
-            {:else}<li class={item.running ? "ok" : "warn"}><span class="mark">{item.running ? "✓" : "!"}</span><div><b>Zigbee2MQTT {item.version}</b> on topic <code>{item.baseTopic}</code>: {item.running ? "running, and it answered just now" : "stopped"}{item.adapterPath ? `, using ${item.adapterPath}` : ""}.</div></li>{/if}
+            {:else}<li class={item.running ? "ok" : "warn"}><span class="mark">{item.running ? "✓" : "!"}</span><div><b>Zigbee2MQTT {item.version}</b> on topic <code>{item.baseTopic}</code>: {item.running ? "running, and it answered just now" : "stopped"}{item.adapterPath ? `, using ${item.adapterPath}` : ""}.<div class="muted">Swarm2MQTT will use the same topic, so anything listening keeps working.</div></div></li>{/if}
           {:else}<li class="ok"><span class="mark">✓</span><div>No Zigbee2MQTT on this server. That's fine for a new network.</div></li>{/each}
         </ul>
       {:else if probeError}<div class="headline bad"><span class="big">✕</span>{probeError}</div>{/if}
@@ -129,7 +129,7 @@
           {:else}
             <div class="headline warn"><span class="big">!</span>{found ? "Zigbee2MQTT is stopped" : "No Zigbee2MQTT on your MQTT server"}</div>
             <p class="muted">{found ? "Start it again for a minute, so it can hand over its network. You'll stop it again before the last step." : "Start it if it's stopped. If it uses its own topic, type it here."}</p>
-            {#if !found}<label class="topic"><span class="muted">Zigbee2MQTT's topic</span><input class="text" bind:value={baseTopic}></label>{/if}
+            {#if !found}<label class="topic"><span class="muted">Zigbee2MQTT's topic</span><input class="text" bind:value={baseTopic}></label><div class="fieldhint">Swarm2MQTT will use this topic too. You can change it later in Settings > MQTT.</div>{/if}
             <div class="actions"><button class="pill ghost" disabled={busy} onclick={refreshProbe}>{busy ? "Looking…" : "Check again"}</button>{#if !found}<button class="pill ghost" disabled={busy} onclick={askZ2m}>Ask anyway</button>{/if}</div>
             <div class="alt">Can't use MQTT? <button onclick={() => byFiles = true}>Drop its files instead</button></div>
           {/if}
@@ -150,6 +150,7 @@
           <ul class="devices">{#each network.devices as device (device.ieee)}<li><label><input type="checkbox" checked={chosen.includes(device.ieee)} onchange={() => toggle(device.ieee)}><span>{device.name}</span><span class="muted">{device.model ?? ""}</span></label></li>{/each}</ul>
           <p class="muted small">Unticked devices stay on the network and wait in Waiting for you, sending nothing, until you accept them.</p>
         {/if}
+        <div class="callout info topicnote"><span class="t">Swarm2MQTT keeps Zigbee2MQTT's MQTT topic, <code>{network.baseTopic}</code>, so whatever listens to it (Node-RED, Home Assistant) carries on as before{network.devices[0] ? `: ${network.baseTopic}/${network.devices[0].name} stays exactly as it was` : ""}. You can change it later in Settings > MQTT.</span></div>
         {#if network.groups?.length}<p class="muted small">Groups: {network.groups.join(", ")}</p>{/if}
         <div class="alt"><button onclick={() => {network = null; files = null}}>Get it again</button></div>
       {/if}
