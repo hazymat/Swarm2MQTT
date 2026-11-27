@@ -10,19 +10,17 @@ Every Zigbee device Zigbee2MQTT supports, with a live map that shows what's wron
 - Each device gets its own MQTT topic and message format
 - Switch from Zigbee2MQTT without re-pairing anything
 
-Status: first version (0.1), not yet tried on a real network. See [SPEC.md](SPEC.md).
+## Setup
 
-## Install
-
-On a Debian or Ubuntu machine (a small VM is plenty):
+Any Debian or Ubuntu machine will do: a small virtual machine, or a container (CT) on Proxmox. A container is fine unless your Zigbee stick has to be plugged into the machine itself; a network stick (like an SMLIGHT SLZB) just needs an address.
 
 ```
 curl -fsSL https://raw.githubusercontent.com/hazymat/swarm2mqtt/main/scripts/install.sh | sudo bash
 ```
 
-Then open `http://<machine>:8080`. The setup wizard asks where the stick is, whether you're coming from Zigbee2MQTT, and for your MQTT server. Add `-s -- --dev` after `bash` for the dev channel. Updates afterwards are one button in Settings.
+Then open `http://<machine>:8080` and follow the setup. Updates are one button in Settings.
 
-Coming from Zigbee2MQTT: copy its data folder to the new machine, point the wizard at it, and stop Zigbee2MQTT before importing (only one can use the stick). Zigbee2MQTT's folder is only read, so going back is always possible.
+Coming from Zigbee2MQTT? Copy its data folder onto the machine, stop Zigbee2MQTT, and choose it during setup. Nothing needs pairing again, and Zigbee2MQTT's folder is never changed.
 
 ## Try it without a stick
 
