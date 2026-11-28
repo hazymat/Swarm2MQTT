@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 44, text: "On an iPhone, the bar at the bottom stays put: scrolling past the end of a page no longer drags it partly off the screen."},
   {id: 43, text: "Every value on every device that has a description now has a small i beside its name: tap it for one line on what it does. The same for all devices, instead of a few values explained and the rest not."},
   {id: 42, text: "The pills at the bottom never pile up: the same message again shows ×2 instead of a second pill, only the newest two show, and older ones fold into \"1 more\" with Clear all. Waiting pills have ✕, and changing a device's value no longer adds one, since the line under the control already says what it's waiting for."},
   {id: 41, text: "On a phone, tapping a button twice quickly, such as + next to a temperature, no longer zooms the page in. Tapping into a box doesn't zoom either. Pinching to zoom still works."},
