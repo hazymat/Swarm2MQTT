@@ -62,7 +62,7 @@
   </Panel>
 
   <Panel key="undo" title="Undo history" status={snap.undo.length ? `${snap.undo.filter(entry => !entry.undone).length} changes · Ctrl+Z undo, Ctrl+Y redo` : "No changes yet"}>
-    {#each snap.undo.slice(0, 3) as entry (entry.id)}<div class="kv"><span class:faint={entry.undone}>{entry.label}</span><span class="faint">{dayClock(entry.ts)}</span></div>{/each}
+    {#each snap.undo.slice(0, 3) as entry (entry.id)}<div class="kv"><span class:faint={entry.undone}>{entry.label}{#if entry.detail}<span class="sub">{entry.detail}</span>{/if}</span><span class="faint">{dayClock(entry.ts)}</span></div>{/each}
     <button class="pill ghost" onclick={() => go("history")}>Open undo history</button>
   </Panel>
 
@@ -86,6 +86,7 @@
   </Panel>
 </div>
 <style>
+  .sub{display:block;font-size:12.5px;color:var(--faint);margin-top:1px;overflow-wrap:anywhere}
   .settings{padding:18px 24px 90px;display:flex;flex-direction:column;gap:12px;max-width:760px}
   .kv .text{max-width:340px}
   .field{display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}

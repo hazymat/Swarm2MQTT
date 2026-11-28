@@ -20,6 +20,14 @@ export interface Pending {wanted: unknown; was: unknown; at: number; step?: numb
 // close enough is the same: within half a step (a valve rounds 18.4 to 18.5), and on / ON / true alike
 const sameValue = (one: unknown, other: unknown, step = 0) => typeof one === "number" && typeof other === "number" ? Math.abs(one - other) <= Math.max(step / 2, 1e-6) : normal(one) === normal(other);
 const normal = (value: unknown) => value === true ? "ON" : value === false ? "OFF" : String(value).toUpperCase();
+// Undo history: every entry is a title (what changed, naming the thing) and a subtitle (where, then what it was before).
+// Device or group names live in the subtitle, as they were at the time; the title is short enough for the pill at the bottom.
+const detailOf = (where: string | undefined, before?: string) => [where, before].filter(Boolean).join(" · ") || undefined;
+const quoted = (text: unknown) => `"${text}"`;
+const valueWords = (control: Control | undefined, value: unknown) => value === undefined || value === null ? "not set" : control?.type === "binary" ? (value === control.on ? "on" : "off") : typeof value === "number" ? `${Math.round(value * 100) / 100}${control?.unit ? (control.unit === "%" ? "%" : " " + control.unit) : ""}` : String(value).replace(/_/g, " ");
+const FORMAT_WORDS: Record<string, string> = {json: "one message", values: "one topic per value", both: "both"};
+const minutes = (ms?: number) => ms ? `${Math.round(ms / 60e3)} min` : "learnt";
+const listNames = (names: string[]) => names.length ? `${names.length} ${names.length === 1 ? "device" : "devices"}: ${names.slice(0, 4).join(", ")}${names.length > 4 ? ", …" : ""}` : "no devices";
 const LINK_SCAN_MS = 6 * 3600e3, WATCHED_SCAN_MS = 5 * 60e3, BACKUPS_KEPT = 14, REJOIN_SECONDS = 180;
 export interface Prefs {batteryLeadDays: number; batteryPercent: number; stats: boolean; updateChannel: "stable" | "dev"}
 const DEFAULT_PREFS: Prefs = {batteryLeadDays: 21, batteryPercent: 10, stats: false, updateChannel: "stable"};
@@ -52,7 +60,7 @@ export class App extends EventEmitter {
     super();
     mkdirSync(dataDir, {recursive: true});
     this.store = new Store(`${dataDir}/swarm2mqtt.db`);
-    this.mqtt = new MqttBridge(() => this.mqttSettings, (topic, payload) => this.onMqttSet(topic, payload), () => this.tele(), () => this.changed());
+    this.mqtt = new MqttBridge(() => this.mqttSettings, (topic, payload) => this.onMqttSet(topic, payload), () => this.tele(), () => {this.noteMqtt(); this.changed()});
   }
   get mqttSettings(): MqttSettings {return Object.assign({}, DEFAULT_MQTT, this.store.get("mqtt", {}))}
   // the update channel follows the running build (dev build → dev channel) until the user picks one
@@ -69,7 +77,16 @@ export class App extends EventEmitter {
   }
   markWhatsNewSeen(id: number) {this.store.put("whatsNewSeen", id); this.whatsNew = {updated: false, seen: id}; this.changed()}
 
+  // the system's own story in Activity: started, MQTT broker reached or lost (once per change, not every retry), joining opened and closed
+  mqttWas?: {up: boolean; error?: string};
+  noteMqtt() {
+    const now = {up: this.mqtt.connected, error: this.mqtt.error}, was = this.mqttWas; this.mqttWas = now;
+    if (now.up && !was?.up) this.log("info", "Connected to the MQTT broker.");
+    else if (!now.up && was?.up) this.log("bad", `Lost the MQTT broker${now.error ? `: ${now.error}` : ""}. Trying again every 5 seconds.`);
+    else if (!now.up && now.error && now.error !== was?.error) this.log("bad", `Can't reach the MQTT broker: ${now.error}`);
+  }
   async start() {
+    this.log("info", `Swarm2MQTT ${VERSION} started.`);
     this.noteVersion();
     this.mqtt.start();
     this.startRadio();
@@ -100,7 +117,7 @@ export class App extends EventEmitter {
     radio.on("joined", ieee => this.onJoined(ieee));
     radio.on("interview", (ieee, status) => this.onInterview(ieee, status));
     radio.on("left", ieee => {const device = this.store.device(ieee); if (device) this.log("warn", `${device.name} left the network.`, ieee)});
-    radio.on("permitJoin", seconds => {this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()});
+    radio.on("permitJoin", seconds => {if (!seconds && this.joinEndsAt) this.log("info", "Joining closed."); this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()});
     radio.start().then(() => {if (this.stick?.formNew) this.store.put("stick", Object.assign({}, this.stick, {formNew: undefined})); /* formed: from now on it never leaves its network by itself */ this.retryMs = 2000; this.attempts = 0; this.lastRadioError = undefined; this.syncDevices(); this.scheduleScan(60e3) /* let the network settle after a restart before asking routers who they hear */; this.pingRouters()}).catch(error => {const text = translate(String(error?.message ?? error)).text; this.lastRadioError = text; this.log("bad", text, undefined, [String(error?.stack ?? error)].concat(adapterLog.slice(-30)).join("\n")); this.retryRadio(); this.setRadioStatus({up: false, reason: "Can't connect to the Zigbee adapter", attempts: this.attempts, lastError: text, nextTry: Date.now() + this.retryDelay})});
   }
   retryRadio() {
@@ -307,12 +324,12 @@ export class App extends EventEmitter {
     const device = this.need(ieee), old = device.state[property];
     await this.setValues(ieee, {[property]: value});
     const control = device.controls.find(candidate => candidate.property === property);
-    return this.pushUndo(`${control?.label ?? property} set to ${value}`, {op: "values", ieee, values: {[property]: value}}, {op: "values", ieee, values: {[property]: old}});
+    return this.pushUndo(`${control?.label ?? property} set to ${valueWords(control, value)}`, {op: "values", ieee, values: {[property]: value}}, {op: "values", ieee, values: {[property]: old}}, detailOf(device.name, `was ${valueWords(control, old)}`));
   }
-  patchDevice(ieee: string, fields: Partial<DeviceRow>, label: string) {
+  patchDevice(ieee: string, fields: Partial<DeviceRow>, label: string, detail?: string) {
     const device = this.need(ieee), before = pick(device, Object.keys(fields) as (keyof DeviceRow)[]);
     this.applyDevice(ieee, fields);
-    return this.pushUndo(label, {op: "device", ieee, fields}, {op: "device", ieee, fields: before});
+    return this.pushUndo(label, {op: "device", ieee, fields}, {op: "device", ieee, fields: before}, detail ?? device.name);
   }
   applyDevice(ieee: string, fields: Partial<DeviceRow>) {
     const device = this.need(ieee), oldTopic = device.topic;
@@ -323,35 +340,37 @@ export class App extends EventEmitter {
     this.changed();
   }
   // your own words about it (blank: make and model show instead)
-  setNote(ieee: string, note: string) {const device = this.need(ieee), text = String(note ?? "").trim(); return this.patchDevice(ieee, {note: text || null} as any, text ? `${device.name}: description set` : `${device.name}: description cleared`)}
+  setNote(ieee: string, note: string) {const device = this.need(ieee), text = String(note ?? "").trim(); return this.patchDevice(ieee, {note: text || null} as any, text ? "Description set" : "Description cleared", detailOf(device.name, device.note ? `was ${quoted(device.note)}` : "had none"))}
   rename(ieee: string, name: string) {
     const device = this.need(ieee); name = name.trim();
     if (!name) throw new Error("A name can't be empty.");
     if (this.store.devices().some(other => other.ieee !== ieee && other.name === name)) throw new Error(`"${name}" is already used by another device.`);
     const fields: Partial<DeviceRow> = {name};
     if (device.topic === slug(device.name) || /^[a-z0-9_]+_\d+$/.test(device.topic) && device.topic.startsWith(slug(device.name))) fields.topic = this.uniqueTopic(slug(name), ieee); // topic followed the name, so keep following
-    return this.patchDevice(ieee, fields, `Renamed to "${name}"`);
+    return this.patchDevice(ieee, fields, `Renamed to ${quoted(name)}`, detailOf(`was ${quoted(device.name)}`, fields.topic ? `topic now ${fields.topic}` : undefined));
   }
   setTopic(ieee: string, topic: string) {
     topic = topic.trim().replace(/^\/+|\/+$/g, "");
     if (!topic) throw new Error("A topic can't be empty.");
     if (topic.split("/")[0] === "bridge") throw new Error(`Topics can't start with "bridge", it's used by Swarm2MQTT itself.`);
     if (this.uniqueTopic(topic, ieee) !== topic) throw new Error(`"${topic}" is already used.`);
-    return this.patchDevice(ieee, {topic}, `MQTT topic set to ${topic}`);
+    const device = this.need(ieee); return this.patchDevice(ieee, {topic}, `MQTT topic set to ${topic}`, detailOf(device.name, `was ${device.topic}`));
   }
-  setFormat(ieee: string, format: Format) {return this.patchDevice(ieee, {format}, format === "json" ? "Sends one message" : format === "values" ? "Sends one topic per value" : "Sends both")}
-  setRenames(ieee: string, renames: Record<string, string>) {const clean: Record<string, string> = {}; for (const [key, value] of Object.entries(renames)) if (value.trim() && value.trim() !== key) clean[key] = value.trim(); return this.patchDevice(ieee, {renames: clean}, "Field names changed")}
-  setOfflineOverride(ieee: string, ms: number | null) {return this.patchDevice(ieee, {offline_after_override: ms ?? undefined}, ms ? "Offline time set by hand" : "Offline time learnt again")}
-  hideControl(ieee: string, property: string, hidden: boolean) {const device = this.need(ieee), list = device.hidden_controls.filter(candidate => candidate !== property).concat(hidden ? [property] : []); return this.patchDevice(ieee, {hidden_controls: list}, hidden ? "Control removed" : "Control added back")}
+  setFormat(ieee: string, format: Format) {const device = this.need(ieee); return this.patchDevice(ieee, {format}, `Sends ${FORMAT_WORDS[format]}`, detailOf(device.name, `was ${FORMAT_WORDS[device.format]}`))}
+  setRenames(ieee: string, renames: Record<string, string>) {const clean: Record<string, string> = {}; for (const [key, value] of Object.entries(renames)) if (value.trim() && value.trim() !== key) clean[key] = value.trim();
+    const device = this.need(ieee), changes = Array.from(new Set(Object.keys(clean).concat(Object.keys(device.renames)))).filter(key => clean[key] !== device.renames[key]).map(key => clean[key] ? `${device.renames[key] ?? key} → ${clean[key]}` : `${device.renames[key]} back to ${key}`);
+    return this.patchDevice(ieee, {renames: clean}, changes.length === 1 ? "Value renamed" : "Values renamed", detailOf(device.name, changes.join(", ")))}
+  setOfflineOverride(ieee: string, ms: number | null) {const device = this.need(ieee); return this.patchDevice(ieee, {offline_after_override: ms ?? undefined}, ms ? `Offline after ${minutes(ms)}` : "Offline time learnt again", detailOf(device.name, `was ${device.offline_after_override ? minutes(device.offline_after_override) : "learnt"}`))}
+  hideControl(ieee: string, property: string, hidden: boolean) {const device = this.need(ieee), list = device.hidden_controls.filter(candidate => candidate !== property).concat(hidden ? [property] : []); const label = device.controls.find(control => control.property === property)?.label ?? property.replace(/_/g, " "); return this.patchDevice(ieee, {hidden_controls: list}, hidden ? `Removed control ${quoted(label)}` : `Put back control ${quoted(label)}`)}
   // add a control for any value the device reports that has no control yet
   addControl(ieee: string, property: string) {
     const device = this.need(ieee), sample = device.state[property];
     if (sample === undefined) throw new Error("The device hasn't reported that value.");
     const control: Control & {added: boolean} = {property, label: property.replace(/_/g, " ").replace(/^./, letter => letter.toUpperCase()), type: typeof sample === "number" ? "numeric" : typeof sample === "boolean" || sample === "ON" || sample === "OFF" ? "binary" : "text", readable: true, writable: false, added: true};
     if (sample === "ON" || sample === "OFF") {control.on = "ON"; control.off = "OFF"}
-    return this.patchDevice(ieee, {controls: device.controls.filter(candidate => candidate.property !== property).concat([control]), hidden_controls: device.hidden_controls.filter(candidate => candidate !== property)}, `Added "${control.label}"`);
+    return this.patchDevice(ieee, {controls: device.controls.filter(candidate => candidate.property !== property).concat([control]), hidden_controls: device.hidden_controls.filter(candidate => candidate !== property)}, `Added control ${quoted(control.label)}`);
   }
-  accept(ieee: string) {const device = this.need(ieee); this.log("info", `Accepted ${device.name}.`, ieee); return this.patchDevice(ieee, {status: "accepted"}, `Accepted ${device.name}`)}
+  accept(ieee: string) {const device = this.need(ieee); this.log("info", `Accepted ${device.name}.`, ieee); return this.patchDevice(ieee, {status: "accepted"}, `Accepted ${device.name}`, detailOf([device.vendor, device.model].filter(Boolean).join(" ") || undefined, `sends on ${device.topic}`))}
   // Reject and remove both take the device off the network. Undo opens join and restores everything when it comes back.
   async removeDevice(ieee: string, reject = false) {
     const device = this.need(ieee);
@@ -362,7 +381,7 @@ export class App extends EventEmitter {
     this.store.deleteDevice(ieee); this.mqtt.clearRetained(device.topic); this.onlineCache.delete(ieee);
     this.log("info", reject ? `Rejected ${device.name}.` : `Removed ${device.name}.`, ieee);
     this.changed();
-    return this.pushUndo(reject ? `Rejected ${device.name}` : `Removed ${device.name}`, {op: "remove", ieee}, {op: "rejoin", row: device});
+    return this.pushUndo(reject ? `Rejected ${device.name}` : `Removed ${device.name}`, {op: "remove", ieee}, {op: "rejoin", row: device}, detailOf([device.vendor, device.model].filter(Boolean).join(" ") || undefined, reject ? undefined : `sent on ${device.topic}`));
   }
   // a battery device picks its own parent: open joining on the chosen plug only, ask it to leave and come straight back, and guide a button press
   moving?: {ieee: string; via: string; until: number};
@@ -378,7 +397,7 @@ export class App extends EventEmitter {
     this.moving = undefined; this.join(0).catch(() => {}); this.scanSoon = true; this.scheduleScan(15e3);
     this.log(parent === move.via ? "info" : "warn", parent === move.via ? `${device?.name} now talks through ${name(parent)}.` : `${device?.name} came back through ${name(parent)}, not ${name(move.via)}. Try again with it close to ${name(move.via)}.`, ieee); this.changed();
   }
-  async join(seconds: number, via?: string) {await this.requireRadio().permitJoin(seconds, via || undefined); this.joinVia = seconds ? via : undefined; this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()}
+  async join(seconds: number, via?: string) {const wasOpen = this.joinEndsAt > Date.now(); await this.requireRadio().permitJoin(seconds, via || undefined); if (seconds && !wasOpen) this.log("info", `Joining opened for ${Math.round(seconds / 60)} min${via ? ` through ${this.store.device(via)?.name ?? via}` : ""}.`); this.joinVia = seconds ? via : undefined; this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()}
 
   // groups and scenes
   nextId(ids: number[]) {let id = 1; while (ids.includes(id)) id++; return id}
@@ -387,7 +406,8 @@ export class App extends EventEmitter {
     const group: GroupRow = {id: this.nextId(this.store.groups().map(existing => existing.id)), name, topic: this.uniqueTopic(slug(name)), members: []};
     this.store.saveGroup(group);
     for (const ieee of members) await this.groupMember(group.id, ieee, false, false);
-    return this.pushUndo(`Made group "${name}"`, {op: "group", id: group.id, group: this.store.groups().find(existing => existing.id === group.id)!}, {op: "group", id: group.id, group: null});
+    const made = this.store.groups().find(existing => existing.id === group.id)!;
+    return this.pushUndo(`Made group ${quoted(name)}`, {op: "group", id: group.id, group: made}, {op: "group", id: group.id, group: null}, listNames(this.memberNames(made)));
   }
   async groupMember(groupId: number, ieee: string, remove: boolean, undoable = true) {
     const group = this.store.groups().find(existing => existing.id === groupId);
@@ -396,7 +416,8 @@ export class App extends EventEmitter {
     try {await this.requireRadio().groupAdd(groupId, ieee, remove)} catch (error) {throw new Error(translate(String((error as Error).message), this.store.device(ieee)?.name).text)}
     group.members = group.members.filter(member => member !== ieee).concat(remove ? [] : [ieee]);
     this.store.saveGroup(group); this.changed();
-    if (undoable) return this.pushUndo(remove ? "Removed from group" : `Added to "${group.name}"`, {op: "group", id: groupId, group}, {op: "group", id: groupId, group: before});
+    const deviceName = this.store.device(ieee)?.name ?? ieee;
+    if (undoable) return this.pushUndo(remove ? `Removed ${deviceName} from a group` : `Added ${deviceName} to a group`, {op: "group", id: groupId, group}, {op: "group", id: groupId, group: before}, detailOf(quoted(group.name), `now ${group.members.length} ${group.members.length === 1 ? "device" : "devices"}`));
   }
   async applyGroup(id: number, group: GroupRow | null) {
     const current = this.store.groups().find(existing => existing.id === id), wanted = group?.members ?? [];
@@ -405,8 +426,8 @@ export class App extends EventEmitter {
     if (group) this.store.saveGroup(group); else this.store.deleteGroup(id);
     this.changed();
   }
-  async deleteGroup(id: number) {const group = this.store.groups().find(existing => existing.id === id); if (!group) return; await this.applyGroup(id, null); return this.pushUndo(`Deleted group "${group.name}"`, {op: "group", id, group: null}, {op: "group", id, group})}
-  renameGroup(id: number, name: string) {const group = this.store.groups().find(existing => existing.id === id)!, before = structuredClone(group); group.name = name.trim(); group.topic = this.uniqueTopic(slug(group.name)); this.store.saveGroup(group); this.changed(); return this.pushUndo(`Renamed group to "${group.name}"`, {op: "group", id, group}, {op: "group", id, group: before})}
+  async deleteGroup(id: number) {const group = this.store.groups().find(existing => existing.id === id); if (!group) return; await this.applyGroup(id, null); return this.pushUndo(`Deleted group ${quoted(group.name)}`, {op: "group", id, group: null}, {op: "group", id, group}, listNames(this.memberNames(group)))}
+  renameGroup(id: number, name: string) {const group = this.store.groups().find(existing => existing.id === id)!, before = structuredClone(group); group.name = name.trim(); group.topic = this.uniqueTopic(slug(group.name)); this.store.saveGroup(group); this.changed(); return this.pushUndo(`Renamed group to ${quoted(group.name)}`, {op: "group", id, group}, {op: "group", id, group: before}, detailOf(`was ${quoted(before.name)}`, `topic now ${group.topic}`))}
   // group commands get no answer of their own: after sending, each member is asked for its value, so the result says who really changed
   async confirmMembers(memberIeees: string[], expected: (ieee: string) => Record<string, unknown> | undefined, sentAt: number) {
     const name = (ieee: string) => this.store.device(ieee)?.name ?? ieee, matches = (want: Record<string, unknown>, have: Record<string, unknown>) => Object.entries(want).every(([key, value]) => typeof value === "number" ? Math.abs(Number(have[key]) - value) <= 3 : String(have[key]).toUpperCase() === String(value).toUpperCase());
@@ -429,7 +450,7 @@ export class App extends EventEmitter {
     const scene = {id: this.nextId(this.store.scenes().map(existing => existing.id)), group_id: groupId, name: name.trim() || "Scene", states};
     await this.requireRadio().sceneStore(groupId, scene.id);
     this.store.saveScene(scene); this.changed();
-    return this.pushUndo(`Saved scene "${scene.name}"`, {op: "scene", id: scene.id, scene}, {op: "scene", id: scene.id, scene: null});
+    return this.pushUndo(`Saved scene ${quoted(scene.name)}`, {op: "scene", id: scene.id, scene}, {op: "scene", id: scene.id, scene: null}, detailOf(`group ${quoted(group.name)}`, listNames(this.memberNames(group))));
   }
   async recallScene(id: number) {
     const scene = this.store.scenes().find(existing => existing.id === id); if (!scene) throw new Error("That scene isn't known.");
@@ -439,14 +460,14 @@ export class App extends EventEmitter {
     const pick = (state: Record<string, unknown> | undefined) => {if (!state) return undefined; const want: Record<string, unknown> = {}; for (const key of ["state", "brightness"]) if (key in state) want[key] = state[key]; if (want.state === "OFF") delete want.brightness; return want};
     return this.confirmMembers(Object.keys(scene.states), ieee => pick(scene.states[ieee]), sentAt);
   }
-  deleteScene(id: number) {const scene = this.store.scenes().find(existing => existing.id === id); if (!scene) return; this.store.deleteScene(id); this.changed(); return this.pushUndo(`Deleted scene "${scene.name}"`, {op: "scene", id, scene: null}, {op: "scene", id, scene})}
+  deleteScene(id: number) {const scene = this.store.scenes().find(existing => existing.id === id); if (!scene) return; this.store.deleteScene(id); this.changed(); const group = this.store.groups().find(existing => existing.id === scene.group_id); return this.pushUndo(`Deleted scene ${quoted(scene.name)}`, {op: "scene", id, scene: null}, {op: "scene", id, scene}, detailOf(group ? `group ${quoted(group.name)}` : undefined, listNames(Object.keys(scene.states).map(ieee => this.store.device(ieee)?.name ?? ieee))))}
   // direct control: a switch bound to a light or group works with the server or MQTT down
   async bind(from: string, to: string, remove = false) {
     const target = to.startsWith("group:") ? Number(to.slice(6)) : to;
     try {await this.requireRadio().bind(from, target, remove)} catch (error) {throw new Error(translate(String((error as Error).message), this.store.device(from)?.name).text)}
     this.store.saveBinding(from, to, remove); this.changed();
     const fromName = this.store.device(from)?.name ?? from, toName = typeof target === "number" ? this.store.groups().find(group => group.id === target)?.name : this.store.device(to)?.name;
-    return this.pushUndo(remove ? `${fromName} no longer controls ${toName}` : `${fromName} now controls ${toName}`, {op: "bind", from, to, remove}, {op: "bind", from, to, remove: !remove});
+    return this.pushUndo(remove ? `No longer controls ${toName}` : `Now controls ${toName}`, {op: "bind", from, to, remove}, {op: "bind", from, to, remove: !remove}, detailOf(fromName, remove ? "direct link removed" : "direct link, works without this server"));
   }
   // firmware: one tap per device, never automatic
   // a device that doesn't answer gets told apart from one with nothing new: battery devices only listen when awake
@@ -466,7 +487,7 @@ export class App extends EventEmitter {
   }
   async setReporting(ieee: string, level: ReportLevel) {
     const device = this.need(ieee), before = device.reporting?.level ?? "normal", values = await this.applyReporting(ieee, level);
-    return Object.assign(this.pushUndo(`${device.name}: reports ${REPORT_WORDS[level]}`, {op: "reporting", ieee, level}, {op: "reporting", ieee, level: before}), {values});
+    return Object.assign(this.pushUndo(`Reports ${REPORT_WORDS[level]}`, {op: "reporting", ieee, level}, {op: "reporting", ieee, level: before}, detailOf(device.name, `was ${REPORT_WORDS[before]}`)), {values});
   }
   async checkFirmware(ieee: string) {
     const device = this.need(ieee);
@@ -485,7 +506,10 @@ export class App extends EventEmitter {
   setSetting(key: "mqtt" | "prefs", value: Record<string, unknown>, label: string) {
     const before = this.store.get(key, {}), after = Object.assign({}, before, value);
     this.applySetting(key, after);
-    return this.pushUndo(label, {op: "setting", key, value: after}, {op: "setting", key, value: before});
+    // subtitle: which settings, and what they were (passwords never shown)
+    const SETTING_WORDS: Record<string, string> = {url: "address", username: "user name", password: "password", baseTopic: "base topic", heartbeatSeconds: "heartbeat", retain: "retain", updateChannel: "update channel"};
+    const changed = Object.keys(value).filter(name => JSON.stringify((before as any)[name]) !== JSON.stringify((after as any)[name])).map(name => name === "password" ? "password changed" : `${SETTING_WORDS[name] ?? name.replace(/([A-Z])/g, " $1").toLowerCase()} was ${(before as any)[name] === undefined ? "not set" : String((before as any)[name])}`);
+    return this.pushUndo(label, {op: "setting", key, value: after}, {op: "setting", key, value: before}, detailOf("Settings", changed.join(", ") || undefined));
   }
   applySetting(key: string, value: unknown) {
     const oldBase = this.mqtt.base;
@@ -496,7 +520,8 @@ export class App extends EventEmitter {
   }
 
   // ---------- undo / redo, server side so Ctrl+Z works from any page ----------
-  pushUndo(label: string, forward: Op, backward: Op) {const id = this.store.pushUndo(label, forward, backward); this.emit("toast", {id, label}); this.changed(); return {undoId: id, label}}
+  pushUndo(label: string, forward: Op, backward: Op, detail?: string) {const id = this.store.pushUndo(label, forward, backward, detail); this.emit("toast", {id, label}); this.changed(); return {undoId: id, label}}
+  memberNames(group: GroupRow) {return group.members.map(ieee => this.store.device(ieee)?.name ?? ieee)}
   async undo(quiet = false) {const entry = this.store.lastUndo(false); if (!entry) throw new Error("Nothing to undo."); try {await this.apply(entry.backward)} catch (error) {throw new Error(`Couldn't undo "${entry.label}": ${(error as Error).message}`)} this.store.markUndo(entry.id, true); if (!quiet) this.emit("toast", {label: `Undone: ${entry.label}`}); this.changed(); return entry}
   async redo(quiet = false) {const entry = this.store.lastUndo(true); if (!entry) throw new Error("Nothing to redo."); try {await this.apply(entry.forward)} catch (error) {throw new Error(`Couldn't redo "${entry.label}": ${(error as Error).message}`)} this.store.markUndo(entry.id, false); if (!quiet) this.emit("toast", {label: `Redone: ${entry.label}`}); this.changed(); return entry}
   // undo history: step back to just before a change (undoing it and everything after), or forward again to include it; stops at the first step that can't be done, and says so

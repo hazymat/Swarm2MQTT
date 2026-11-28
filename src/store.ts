@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS scenes(id INTEGER PRIMARY KEY, group_id INT, name TEX
 CREATE TABLE IF NOT EXISTS bindings(from_ieee TEXT, "to" TEXT, PRIMARY KEY(from_ieee, "to"));
 CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forward TEXT, backward TEXT, undone INT DEFAULT 0);`);
     // columns added after the first release
-    for (const [table, column] of [["devices", "note TEXT"], ["devices", "reporting TEXT"], ["links", "seen INT"]]) try {this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)} catch {}
+    for (const [table, column] of [["devices", "note TEXT"], ["devices", "reporting TEXT"], ["undo", "detail TEXT"], ["links", "seen INT"]]) try {this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)} catch {}
   }
   // settings
   get<T>(key: string, fallback: T): T {const row: any = this.db.prepare("SELECT value FROM settings WHERE key=?").get(key); return row ? JSON.parse(row.value) : fallback}
@@ -73,11 +73,11 @@ CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forw
   bindings(): BindingRow[] {return this.db.prepare(`SELECT from_ieee,"to" FROM bindings`).all() as any}
   saveBinding(fromIeee: string, to: string, remove = false) {this.db.prepare(remove ? `DELETE FROM bindings WHERE from_ieee=? AND "to"=?` : `INSERT OR IGNORE INTO bindings VALUES(?,?)`).run(fromIeee, to)}
   // undo stack
-  pushUndo(label: string, forward: unknown, backward: unknown): number {this.db.prepare("DELETE FROM undo WHERE undone=1").run(); return Number(this.db.prepare("INSERT INTO undo(ts,label,forward,backward) VALUES(?,?,?,?)").run(Date.now(), label, JSON.stringify(forward), JSON.stringify(backward)).lastInsertRowid)}
+  pushUndo(label: string, forward: unknown, backward: unknown, detail?: string): number {this.db.prepare("DELETE FROM undo WHERE undone=1").run(); return Number(this.db.prepare("INSERT INTO undo(ts,label,forward,backward,detail) VALUES(?,?,?,?,?)").run(Date.now(), label, JSON.stringify(forward), JSON.stringify(backward), detail ?? null).lastInsertRowid)}
   lastUndo(undone: boolean): any {const row: any = this.db.prepare(`SELECT * FROM undo WHERE undone=? ORDER BY id ${undone ? "ASC" : "DESC"} LIMIT 1`).get(undone ? 1 : 0); return row && Object.assign(row, {forward: JSON.parse(row.forward), backward: JSON.parse(row.backward)})}
   markUndo(id: number, undone: boolean) {this.db.prepare("UPDATE undo SET undone=? WHERE id=?").run(undone ? 1 : 0, id)}
   // hand: undoing it needs the person (a removed device only comes back when its button is pressed)
-  undoList(limit = 50) {return this.db.prepare("SELECT id,ts,label,undone,json_extract(backward,'$.op')='rejoin' hand FROM undo ORDER BY id DESC LIMIT ?").all(limit)}
+  undoList(limit = 50) {return this.db.prepare("SELECT id,ts,label,detail,undone,json_extract(backward,'$.op')='rejoin' hand FROM undo ORDER BY id DESC LIMIT ?").all(limit)}
   // everything older than 30 days goes
   prune() {const cutoff = Date.now() - HISTORY_DAYS * 864e5; for (const table of ["history", "links", "events", "undo"]) this.db.prepare(`DELETE FROM ${table} WHERE ts<?`).run(cutoff); this.db.prepare("DELETE FROM events WHERE id <= (SELECT id FROM events ORDER BY id DESC LIMIT 1 OFFSET ?)").run(EVENTS_KEPT)}
 }
