@@ -8,6 +8,13 @@ import {stepFromLog} from "../joinwatch.js";
 export interface StickConfig {path: string; adapter: "ember" | "zstack"; baudRate?: number; rtscts?: boolean; panId: number; extendedPanId: number[]; channel: number; networkKey: number[]; formNew?: boolean}
 const OTA_SETTINGS = {requestTimeout: 150000, responseDelay: 250, baseSize: 50};
 
+// Plain names for the Zigbee spec's jargon, whichever device uses it, with a line on why you'd change it
+const PLAIN: Record<string, {label: string; help?: string}> = {
+  occupied_heating_setpoint: {label: "Target temperature"},
+  unoccupied_heating_setpoint: {label: "Away temperature", help: "Used while the valve is in away mode."},
+  local_temperature: {label: "Temperature", help: "Measured at the valve."},
+  local_temperature_calibration: {label: "Temperature correction", help: "The valve sits by the radiator, so it often reads warmer than the room. Lower this if the room ends up cooler than you set."},
+};
 // Flatten the library's exposes (lights, switches, composites) into simple controls
 export function toControls(exposes: any[], guessed: boolean): Control[] {
   const controls: Control[] = [];
@@ -15,7 +22,7 @@ export function toControls(exposes: any[], guessed: boolean): Control[] {
     if (expose.features?.length && expose.type !== "composite") {for (const feature of expose.features) walk(feature); return}
     if (!expose.property || controls.some(control => control.property === expose.property)) return;
     const type = expose.type === "binary" || expose.type === "numeric" || expose.type === "enum" ? expose.type : "text";
-    controls.push({property: expose.property, label: expose.label ?? expose.name, type, readable: !!(expose.access & 1), writable: !!(expose.access & 2), unit: expose.unit, min: expose.value_min, max: expose.value_max, step: expose.value_step, values: expose.values, on: expose.value_on, off: expose.value_off, setting: expose.category === "config", guessed: guessed || undefined});
+    controls.push({property: expose.property, label: PLAIN[expose.property]?.label ?? expose.label ?? expose.name, help: PLAIN[expose.property]?.help, type, readable: !!(expose.access & 1), writable: !!(expose.access & 2), unit: expose.unit, min: expose.value_min, max: expose.value_max, step: expose.value_step, values: expose.values, on: expose.value_on, off: expose.value_off, setting: expose.category === "config", guessed: guessed || undefined});
   };
   for (const expose of exposes) walk(expose);
   return controls;

@@ -29,6 +29,8 @@ What Swarm2MQTT does that Zigbee2MQTT doesn't, or does for you where Zigbee2MQTT
 - **Move a battery device to another plug**, guided: joining opens on that plug only and the device is asked to come back through it.
 
 ## Day to day
+- **Plain names for Zigbee jargon**, like Target temperature instead of occupied heating setpoint, with a line on when to change a setting.
+- **Every number shows its value** with − and + for exact steps, not a bare slider.
 - **Setup wizard**, no config file.
 - **Updates show within 2 minutes** and install with one press.
 - **A description on every device**, the make and model until you write one, and searchable.

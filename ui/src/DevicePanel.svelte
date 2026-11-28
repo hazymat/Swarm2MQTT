@@ -1,6 +1,7 @@
 <script>
   import {live, act, call, toast} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
+  import NumberControl from "./NumberControl.svelte";
   import {STATUS_COLOUR, STATUS_WORD, ago, duration, dayClock, valueText, rssiWord, makeModel, hopOf, HOP_WORDS, weakUpstream} from "./util.js";
   import {weeksText} from "./weeks.js";
   import Icon from "./Icon.svelte";
@@ -95,10 +96,10 @@
       <h3>Now <span class="faint">{ago(device.last_seen, view.now)}</span></h3>
       {#each readings as control (control.property)}
         <div class="kv">
-          <span class="k">{control.label}{#if control.guessed}<span class="guess" title="Our best guess from what the device reports">guessed</span>{/if}</span>
+          <span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}{#if control.guessed}<span class="guess" title="Our best guess from what the device reports">guessed</span>{/if}</span>
           <span class="v">
             {#if control.writable && control.type === "binary"}<button class="switch" class:on={device.state[control.property] === control.on} onclick={() => setValue(control, device.state[control.property] === control.on ? control.off : control.on)} aria-label={control.label}></button>
-            {:else if control.writable && control.type === "numeric" && control.max != null}<input type="range" min={control.min ?? 0} max={control.max} step={control.step ?? 1} value={device.state[control.property] ?? 0} onchange={event => setValue(control, Number(event.currentTarget.value))}>
+            {:else if control.writable && control.type === "numeric"}<NumberControl {control} value={device.state[control.property]} onset={number => setValue(control, number)}/>
             {:else if control.writable && control.type === "enum"}<span class="seg">{#each control.values as value}<button class:on={device.state[control.property] === value} onclick={() => setValue(control, value)}>{valueText(null, value)}</button>{/each}</span>
             {:else}<span class="reading">{valueText(control, device.state[control.property])}</span>{/if}
             <button class="x" title="Remove this control" onclick={() => act("hideControl", {ieee: device.ieee, property: control.property, hidden: true})}>✕</button>
@@ -114,10 +115,10 @@
       <div class="box">
         <h3>On the device</h3>
         {#each moreSettings ? settings : common as control (control.property)}
-          <div class="kv"><span class="k">{control.label}</span>
+          <div class="kv"><span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}</span>
             {#if control.type === "enum"}<span class="seg">{#each control.values as value}<button class:on={String(device.state[control.property]) === String(value)} onclick={() => setValue(control, value)}>{valueText(null, value)}</button>{/each}</span>
             {:else if control.type === "binary"}<button class="switch" class:on={device.state[control.property] === control.on} onclick={() => setValue(control, device.state[control.property] === control.on ? control.off : control.on)} aria-label={control.label}></button>
-            {:else if control.type === "numeric"}<input class="text num" type="number" min={control.min} max={control.max} value={device.state[control.property] ?? ""} onchange={event => setValue(control, Number(event.currentTarget.value))}>
+            {:else if control.type === "numeric"}<NumberControl {control} value={device.state[control.property]} onset={number => setValue(control, number)}/>
             {:else}<span>{valueText(control, device.state[control.property])}</span>{/if}
           </div>
         {/each}
@@ -217,6 +218,7 @@
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .v{display:flex;align-items:center;gap:8px}
   .reading{font-size:18px;font-weight:500}
+  .help{display:block;font-size:12.5px;color:var(--faint);font-weight:400;max-width:34ch;margin-top:1px}
   .x{color:var(--faint);font-size:12px;padding:2px 4px;opacity:0}
   .kv:hover .x{opacity:1}
   @media (hover:none){.x{opacity:1}}

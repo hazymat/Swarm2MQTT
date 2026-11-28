@@ -101,7 +101,7 @@ export class SimRadio extends Radio {
   async reinterview(ieee: string) {
     const device = this.halfJoined.get(ieee); if (!device) return; this.emit("interview", ieee, "started");
     await new Promise(resolve => setTimeout(resolve, 1500));
-    Object.assign(device, {model: "TRVZB", vendor: "SONOFF", description: "Zigbee thermostatic radiator valve", supported: true, controls: [{property: "local_temperature", label: "Temperature", type: "numeric", readable: true, writable: false, unit: "°C"}], interviewing: false, state: {local_temperature: 19.5, battery: 100}});
+    Object.assign(device, {model: "TRVZB", vendor: "SONOFF", description: "Zigbee thermostatic radiator valve", supported: true, controls: [{property: "local_temperature", label: "Temperature", help: "Measured at the valve.", type: "numeric", readable: true, writable: false, unit: "°C"}, {property: "occupied_heating_setpoint", label: "Target temperature", type: "numeric", readable: true, writable: true, unit: "°C", min: 4, max: 35, step: 0.5}, {property: "local_temperature_calibration", label: "Temperature correction", help: "The valve sits by the radiator, so it often reads warmer than the room. Lower this if the room ends up cooler than you set.", type: "numeric", readable: true, writable: true, unit: "°C", min: -12.7, max: 12.7, step: 0.2, setting: true}], interviewing: false, state: {local_temperature: 19.5, occupied_heating_setpoint: 20, local_temperature_calibration: -0.1, battery: 100}});
     this.halfJoined.delete(ieee); this.emit("signal", ieee, -79, 96); this.emit("joinStep", ieee, "identified"); this.emit("joinStep", ieee, "ready"); this.emit("interview", ieee, "successful");
   }
   async scanLinks(progress: (step: ScanProgress) => void = () => {}): Promise<Link[]> {
