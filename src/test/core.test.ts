@@ -10,6 +10,7 @@ import {payloadsFor, MqttBridge, SENT_KEPT} from "../mqtt.js";
 import {readZ2m, folderFiles, pickFiles} from "../importz2m.js";
 import {translate} from "../errors.js";
 import {App} from "../app.js";
+import {stepFromLog} from "../joinwatch.js";
 import type {DeviceRow} from "../store.js";
 
 const row = (fields: Partial<DeviceRow>): DeviceRow => Object.assign({ieee: "0x1", name: "Sensor", topic: "sensor", format: "json", renames: {}, status: "accepted", kind: "battery", supported: true, controls: [], hidden_controls: [], added_at: 0, state: {}, gaps: []} as DeviceRow, fields);
@@ -167,4 +168,10 @@ test("an adapter that can't be reached never stops the service", {timeout: 30e3}
     assert.ok(app.retryTimer, "a retry is scheduled");
     assert.ok(app.snapshot().devices, "the page still gets a snapshot");
   } finally {clearTimeout(app.retryTimer); await app.stop().catch(() => {})}
+});
+
+test("join steps read from the library's log, in either spelling it uses", () => {
+  assert.equal(stepFromLog("Interview - got 'modelId' for device '0x00124b0000000001'")?.step, "identified");
+  assert.equal(stepFromLog("Interview - got 'modelID' for device '0x00124b0000000001'")?.step, "identified");
+  assert.equal(stepFromLog("Interview - got active endpoints for device '0x00124b0000000001'")?.step, "endpoints");
 });

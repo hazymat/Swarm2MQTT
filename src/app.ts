@@ -107,7 +107,7 @@ export class App extends EventEmitter {
     radio.on("status", status => {this.setRadioStatus(status); if (!status.up && radio === this.radio) this.retryRadio()});
     radio.on("state", (ieee, values, lqi, assumed) => this.onState(ieee, values, lqi, assumed));
     radio.on("heard", ieee => this.onHeard(ieee));
-    radio.on("joinStep", (ieee, step) => this.joinWatch.step(ieee, step));
+    radio.on("joinStep", (ieee, step) => {if (step === "ready" && this.radio?.list().find(device => device.ieee === ieee)?.model) this.joinWatch.step(ieee, "identified"); this.joinWatch.step(ieee, step)}); // some devices give their model before the step the log names (Tuya), so a finished join with a model counts
     radio.on("joinFailed", (ieee, error) => this.joinWatch.fail(ieee, this.joinWatch.reports.get(ieee)?.failing?.step ?? "identified", error ?? "no answer"));
     radio.on("signal", (ieee, rssi, lqi) => {this.joinWatch.heard(ieee, rssi, lqi); if (rssi !== undefined) this.signals.set(ieee, {rssi, lqi, at: Date.now()})});
     radio.on("delivery", (ieee, ok) => this.joinWatch.delivered(ieee, ok));
@@ -139,6 +139,8 @@ export class App extends EventEmitter {
       device = rejoin ? structuredClone(rejoin) : {ieee: radioDevice.ieee, name, topic: this.uniqueTopic(slug(name)), format: "json", renames: {}, status: isNew ? "waiting" : "accepted", kind: radioDevice.kind, supported: radioDevice.supported, controls: [], hidden_controls: [], added_at: Date.now(), state: {}, gaps: []};
       if (rejoin) {this.rejoinRows.delete(radioDevice.ieee); this.log("info", `${device.name} is back, with its old settings.`, device.ieee)}
     }
+    // named "New device" before it said what it is: takes its model's name once it does, while nothing has gone out over MQTT yet
+    if (device.status === "waiting" && radioDevice.model && /^New device( \d+)?$/.test(device.name)) {device.name = this.uniqueName(radioDevice.model, device.ieee); device.topic = this.uniqueTopic(slug(device.name), device.ieee)}
     device.kind = radioDevice.kind; device.model = radioDevice.model; device.vendor = radioDevice.vendor; device.description = radioDevice.description; device.supported = radioDevice.supported; device.firmware = radioDevice.firmware;
     if (radioDevice.controls.length) device.controls = this.mergeControls(device.controls, radioDevice.controls);
     this.store.saveDevice(device);

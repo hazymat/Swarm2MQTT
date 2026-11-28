@@ -49,7 +49,7 @@ export function stepFromLog(line: string): {ieee: string; step?: JoinStep; error
   const ieee = line.match(/'(0x[0-9a-f]{16})'/i)?.[1]; if (!ieee) return undefined;
   if (/Interview - got node descriptor/.test(line)) return {ieee, step: "described"};
   if (/Interview - got active endpoints/.test(line)) return {ieee, step: "endpoints"};
-  if (/Interview - got 'modelID'/.test(line)) return {ieee, step: "identified"};
+  if (/Interview - got 'modelID'/i.test(line)) return {ieee, step: "identified"};
   if (/Interview - completed/.test(line)) return {ieee, step: "ready"};
   if (/node descriptor request failed/.test(line)) return {ieee, step: "described", error: "no answer"};
   if (/active endpoints request failed/.test(line)) return {ieee, step: "endpoints", error: line.match(/\((.*)\)$/)?.[1] ?? "no answer"};
