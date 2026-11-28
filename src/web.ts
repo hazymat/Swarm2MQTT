@@ -96,6 +96,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "history": return app.store.history(args.ieee, args.key, args.since);
     case "topology": return app.store.linksAt(args.ts);
     case "linkHistory": return app.store.linkHistory(args.ieee);
+    case "sent": return app.mqtt.sent.get(String(args.ieee)) ?? [];
     case "backups": return app.backups();
     case "backupNow": return app.backup("by-hand");
     case "restore": return app.restore(args.name);

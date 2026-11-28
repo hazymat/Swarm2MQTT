@@ -8,7 +8,7 @@
   import Pic from "./Pic.svelte";
   import Spark from "./Spark.svelte";
   import JoinStatus from "./JoinStatus.svelte";
-  import MqttTree from "./MqttTree.svelte";
+  import SentMessages from "./SentMessages.svelte";
   let {device} = $props();
   let snap = $derived(live.snap);
   let health = $derived(device.health), joinReport = $derived(live.snap.joinReports?.find(report => report.ieee === device.ieee));
@@ -55,7 +55,7 @@
   let renames = $state({});
   $effect(() => {renames = Object.assign({}, device.renames)});
   let base = $derived(snap.mqtt.settings.baseTopic);
-  let preview = $derived.by(() => {const renamed = {}; for (const [key, value] of Object.entries(device.state)) renamed[device.renames[key] || key] = value; return renamed});
+  let renamedCount = $derived(Object.values(device.renames ?? {}).filter(Boolean).length);
   let bindTarget = $state("");
   let canBind = $derived(device.controls.some(control => control.property === "action"));
   let boundTo = $derived(snap.bindings.filter(binding => binding.from_ieee === device.ieee));
@@ -183,15 +183,17 @@
 
   {#if device.status === "accepted"}
     <div class="box">
-      <h3>MQTT <span class="seg">{#each [["json", "One message"], ["values", "Topic per value"], ["both", "Both"]] as [format, label]}<button class:on={device.format === format} onclick={() => act("format", {ieee: device.ieee, format})}>{label}</button>{/each}</span></h3>
+      <h3>How it's sent</h3>
+      <p class="small">Settings: changing these changes what goes out next.</p>
       <div class="kv"><span class="k">Topic</span>
         {#if editingTopic}<input class="text" bind:value={topicDraft} onblur={saveTopic} onkeydown={event => {if (event.key === "Enter") saveTopic(); if (event.key === "Escape") {event.stopPropagation(); editingTopic = false}}} autofocus>
         {:else}<button class="topic" onclick={() => {topicDraft = device.topic; editingTopic = true}}><code>{base}/{device.topic}</code> <Icon name="edit" small/></button>{/if}
       </div>
-      <MqttTree {device} {base} message={preview}/>
-      <button class="link" onclick={() => moreRenames = !moreRenames}>{moreRenames ? "Done renaming fields" : "Rename fields"}</button>
+      <div class="kv wrap"><span class="k">Format</span><span class="seg">{#each [["json", "One message"], ["values", "Topic per value"], ["both", "Both"]] as [format, label]}<button class:on={device.format === format} onclick={() => act("format", {ieee: device.ieee, format})}>{label}</button>{/each}</span></div>
+      <div class="kv wrap"><span class="k">Names</span><span>{renamedCount ? `${renamedCount} ${renamedCount === 1 ? "value" : "values"} renamed` : "As the device names them"} <button class="link" onclick={() => moreRenames = !moreRenames}>{moreRenames ? "Done" : "Change"}</button></span></div>
       {#if moreRenames}{#each Object.keys(device.state) as key}<div class="kv"><span class="k">{key}</span><input class="text half" placeholder={key} bind:value={renames[key]} onchange={() => act("renames", {ieee: device.ieee, renames: $state.snapshot(renames)}).then(() => toast("Saved", null)).catch(() => {})}></div>{/each}{/if}
     </div>
+    <SentMessages {device} {base}/>
   {/if}
 
   {#if canBind}
@@ -266,6 +268,7 @@
   .keys i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
   .keys i.gap{background:var(--glass);border:1px solid var(--glass-border)}
   .small{font-size:13.5px;color:var(--muted);margin-bottom:6px}
+  .kv.wrap{flex-wrap:wrap}
   .small b{color:var(--text)}
   .pend{display:block;font-size:12.5px;font-weight:400;color:var(--muted);margin-top:1px}.pend.set{color:var(--mint)}.pend.other,.pend.none,.pend.failed{color:var(--peach)}
   .pdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:1px;animation:pdot 1.2s ease-in-out infinite}

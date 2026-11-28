@@ -6,7 +6,7 @@ import {createServer} from "node:net";
 import mqtt from "mqtt";
 import {Aedes} from "aedes";
 import {checkIns, batteryDaysLeft, health, FALLBACK_OFFLINE} from "../health.js";
-import {payloadsFor} from "../mqtt.js";
+import {payloadsFor, MqttBridge, SENT_KEPT} from "../mqtt.js";
 import {readZ2m, folderFiles, pickFiles} from "../importz2m.js";
 import {translate} from "../errors.js";
 import {App} from "../app.js";
@@ -40,6 +40,22 @@ test("MQTT payloads: one message, one topic per value, both, with renamed fields
   assert.deepEqual(payloadsFor(row({format: "json"}), values, "base"), [["base/sensor", '{"occupancy":true,"battery":80}']]);
   assert.deepEqual(payloadsFor(row({format: "values", renames: {occupancy: "motion"}}), values, "base"), [["base/sensor/motion", "true"], ["base/sensor/battery", "80"]]);
   assert.equal(payloadsFor(row({format: "both"}), values, "base").length, 3);
+});
+
+test("sent over MQTT: the last few messages, newest first, each a copy of what went out", () => {
+  const bridge = new MqttBridge(() => ({url: "", baseTopic: "base", heartbeatSeconds: 0, retain: false}), () => {}, () => ({}), () => {}), published: string[] = [];
+  const device = row({renames: {occupancy: "motion"}}), state: Record<string, unknown> = {occupancy: false, battery: 80};
+  bridge.device(device, state);
+  assert.equal(bridge.sent.size, 0, "nothing is recorded while not connected");
+  bridge.connected = true; bridge.client = {publish: (topic: string) => {published.push(topic)}} as any;
+  for (let step = 0; step < SENT_KEPT + 2; step++) {state.battery = 80 - step; bridge.device(device, state)}
+  const sent = bridge.sent.get("0x1")!;
+  assert.equal(sent.length, SENT_KEPT);
+  assert.equal(sent[0].message.battery, 80 - SENT_KEPT - 1, "newest first");
+  assert.equal(sent[0].message.motion, false, "renamed as published");
+  assert.equal(sent[0].topic, "base/sensor");
+  assert.equal(bridge.lastSent("0x1"), sent[0].ts);
+  assert.equal(published.length, SENT_KEPT + 2);
 });
 test("errors: raw herdsman text becomes plain words", () => {
   assert.match(translate("zh:ember: Delivery of BROADCAST failed for '65532' clusterId 54").text, /routers/);
