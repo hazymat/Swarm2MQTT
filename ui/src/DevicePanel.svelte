@@ -7,6 +7,7 @@
   import Pic from "./Pic.svelte";
   import Spark from "./Spark.svelte";
   import JoinStatus from "./JoinStatus.svelte";
+  import MqttTree from "./MqttTree.svelte";
   let {device} = $props();
   let snap = $derived(live.snap);
   let health = $derived(device.health), joinReport = $derived(live.snap.joinReports?.find(report => report.ieee === device.ieee));
@@ -167,7 +168,7 @@
         {#if editingTopic}<input class="text" bind:value={topicDraft} onblur={saveTopic} onkeydown={event => {if (event.key === "Enter") saveTopic(); if (event.key === "Escape") {event.stopPropagation(); editingTopic = false}}} autofocus>
         {:else}<button class="topic" onclick={() => {topicDraft = device.topic; editingTopic = true}}><code>{base}/{device.topic}</code> <Icon name="edit" small/></button>{/if}
       </div>
-      <div class="code"><code>{device.format !== "values" ? JSON.stringify(preview) : Object.entries(preview).map(([key, value]) => `${base}/${device.topic}/${key} → ${JSON.stringify(value)}`).join("\n")}</code></div>
+      <MqttTree {device} {base} message={preview}/>
       <button class="link" onclick={() => moreRenames = !moreRenames}>{moreRenames ? "Done renaming fields" : "Rename fields"}</button>
       {#if moreRenames}{#each Object.keys(device.state) as key}<div class="kv"><span class="k">{key}</span><input class="text half" placeholder={key} bind:value={renames[key]} onchange={() => act("renames", {ieee: device.ieee, renames: $state.snapshot(renames)}).then(() => toast("Saved", null)).catch(() => {})}></div>{/each}{/if}
     </div>

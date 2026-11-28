@@ -2,6 +2,8 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 35, text: "A device's MQTT section shows what it sends as a tree: the message with nested parts that fold open, and the topics nested by level. Values are coloured by type, a value that just changed lights up, and each row can copy its topic or value.", go: "home"},
+  {id: 34, text: "Each line on the network map shows its signal (dBm, or link quality) and is coloured green, amber or red for good, fair or weak.", go: "home"},
   {id: 33, text: "On a phone, the bar at the bottom is quieter: the page you're on has a soft blue highlight. Settings has a new Home Screen panel: add Swarm2MQTT to your Home Screen and it opens full screen with its own icon, without the browser's address bar.", go: "settings", at: "#homescreen-card"},
   {id: 32, text: "While the page is open, the map checks itself every 5 minutes, and as soon as you open it if the last check is older than that. Check now is only needed if you can't wait.", go: "home"},
   {id: 31, text: "Undo history: Activity > Undo history (also in Settings) lists your changes. Click one to go back to before it, or an undone one to bring it back. Ctrl+Z undoes, Ctrl+Y redoes, and both say so when there's nothing left.", go: "history"},
