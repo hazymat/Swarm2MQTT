@@ -1,0 +1,380 @@
+{
+ "v0.1.1": {
+  "assets": {
+   "swarm2mqtt-v0.1.1.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T04:58:06Z"
+ },
+ "v0.1.10": {
+  "assets": {
+   "swarm2mqtt-v0.1.10.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T14:32:37Z"
+ },
+ "v0.1.11": {
+  "assets": {
+   "swarm2mqtt-v0.1.11.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T14:37:10Z"
+ },
+ "v0.1.12": {
+  "assets": {
+   "swarm2mqtt-v0.1.12.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T14:37:30Z"
+ },
+ "v0.1.13": {
+  "assets": {
+   "swarm2mqtt-v0.1.13.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T14:55:26Z"
+ },
+ "v0.1.14": {
+  "assets": {
+   "swarm2mqtt-v0.1.14.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T15:58:34Z"
+ },
+ "v0.1.15": {
+  "assets": {
+   "swarm2mqtt-v0.1.15.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T16:00:58Z"
+ },
+ "v0.1.16": {
+  "assets": {
+   "swarm2mqtt-v0.1.16.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T16:05:06Z"
+ },
+ "v0.1.17": {
+  "assets": {
+   "swarm2mqtt-v0.1.17.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T16:09:14Z"
+ },
+ "v0.1.18": {
+  "assets": {
+   "swarm2mqtt-v0.1.18.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T16:22:14Z"
+ },
+ "v0.1.19": {
+  "assets": {
+   "swarm2mqtt-v0.1.19.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T16:25:12Z"
+ },
+ "v0.1.2": {
+  "assets": {
+   "swarm2mqtt-v0.1.2.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T11:08:13Z"
+ },
+ "v0.1.20": {
+  "assets": {
+   "swarm2mqtt-v0.1.20.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T16:42:10Z"
+ },
+ "v0.1.21": {
+  "assets": {
+   "swarm2mqtt-v0.1.21.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T16:51:43Z"
+ },
+ "v0.1.22": {
+  "assets": {
+   "swarm2mqtt-v0.1.22.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T17:03:03Z"
+ },
+ "v0.1.23": {
+  "assets": {
+   "swarm2mqtt-v0.1.23.tar.gz": 3
+  },
+  "prerelease": true,
+  "published": "2026-11-27T17:59:43Z"
+ },
+ "v0.1.24": {
+  "assets": {
+   "swarm2mqtt-v0.1.24.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T18:31:03Z"
+ },
+ "v0.1.25": {
+  "assets": {
+   "swarm2mqtt-v0.1.25.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T18:36:09Z"
+ },
+ "v0.1.26": {
+  "assets": {
+   "swarm2mqtt-v0.1.26.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T18:36:46Z"
+ },
+ "v0.1.27": {
+  "assets": {
+   "swarm2mqtt-v0.1.27.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T18:41:21Z"
+ },
+ "v0.1.28": {
+  "assets": {
+   "swarm2mqtt-v0.1.28.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T18:44:51Z"
+ },
+ "v0.1.29": {
+  "assets": {
+   "swarm2mqtt-v0.1.29.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T18:45:07Z"
+ },
+ "v0.1.3": {
+  "assets": {
+   "swarm2mqtt-v0.1.3.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T13:34:27Z"
+ },
+ "v0.1.30": {
+  "assets": {
+   "swarm2mqtt-v0.1.30.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T18:52:29Z"
+ },
+ "v0.1.31": {
+  "assets": {
+   "swarm2mqtt-v0.1.31.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T19:04:17Z"
+ },
+ "v0.1.32": {
+  "assets": {
+   "swarm2mqtt-v0.1.32.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T19:27:41Z"
+ },
+ "v0.1.33": {
+  "assets": {
+   "swarm2mqtt-v0.1.33.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T19:29:18Z"
+ },
+ "v0.1.34": {
+  "assets": {
+   "swarm2mqtt-v0.1.34.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T19:59:50Z"
+ },
+ "v0.1.35": {
+  "assets": {
+   "swarm2mqtt-v0.1.35.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T20:00:00Z"
+ },
+ "v0.1.37": {
+  "assets": {
+   "swarm2mqtt-v0.1.37.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T21:52:49Z"
+ },
+ "v0.1.39": {
+  "assets": {
+   "swarm2mqtt-v0.1.39.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T21:57:01Z"
+ },
+ "v0.1.4": {
+  "assets": {
+   "swarm2mqtt-v0.1.4.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T13:34:32Z"
+ },
+ "v0.1.40": {
+  "assets": {
+   "swarm2mqtt-v0.1.40.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T21:57:25Z"
+ },
+ "v0.1.41": {
+  "assets": {
+   "swarm2mqtt-v0.1.41.tar.gz": 3
+  },
+  "prerelease": true,
+  "published": "2026-11-27T21:59:29Z"
+ },
+ "v0.1.42": {
+  "assets": {
+   "swarm2mqtt-v0.1.42.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:15:06Z"
+ },
+ "v0.1.43": {
+  "assets": {
+   "swarm2mqtt-v0.1.43.tar.gz": 3
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:17:41Z"
+ },
+ "v0.1.44": {
+  "assets": {
+   "swarm2mqtt-v0.1.44.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:23:09Z"
+ },
+ "v0.1.45": {
+  "assets": {
+   "swarm2mqtt-v0.1.45.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:25:17Z"
+ },
+ "v0.1.46": {
+  "assets": {
+   "swarm2mqtt-v0.1.46.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:32:08Z"
+ },
+ "v0.1.47": {
+  "assets": {
+   "swarm2mqtt-v0.1.47.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:36:16Z"
+ },
+ "v0.1.48": {
+  "assets": {
+   "swarm2mqtt-v0.1.48.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:41:04Z"
+ },
+ "v0.1.49": {
+  "assets": {
+   "swarm2mqtt-v0.1.49.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T00:45:24Z"
+ },
+ "v0.1.5": {
+  "assets": {
+   "swarm2mqtt-v0.1.5.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T13:38:42Z"
+ },
+ "v0.1.50": {
+  "assets": {
+   "swarm2mqtt-v0.1.50.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:01:06Z"
+ },
+ "v0.1.51": {
+  "assets": {
+   "swarm2mqtt-v0.1.51.tar.gz": 3
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:01:50Z"
+ },
+ "v0.1.52": {
+  "assets": {
+   "swarm2mqtt-v0.1.52.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:03:56Z"
+ },
+ "v0.1.53": {
+  "assets": {
+   "swarm2mqtt-v0.1.53.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:05:45Z"
+ },
+ "v0.1.54": {
+  "assets": {
+   "swarm2mqtt-v0.1.54.tar.gz": 3
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:06:21Z"
+ },
+ "v0.1.55": {
+  "assets": {
+   "swarm2mqtt-v0.1.55.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:10:03Z"
+ },
+ "v0.1.57": {
+  "assets": {
+   "swarm2mqtt-v0.1.57.tar.gz": 0
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:22:00Z"
+ },
+ "v0.1.6": {
+  "assets": {
+   "swarm2mqtt-v0.1.6.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T13:44:57Z"
+ },
+ "v0.1.7": {
+  "assets": {
+   "swarm2mqtt-v0.1.7.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-27T13:49:29Z"
+ },
+ "v0.1.8": {
+  "assets": {
+   "swarm2mqtt-v0.1.8.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T13:54:28Z"
+ },
+ "v0.1.9": {
+  "assets": {
+   "swarm2mqtt-v0.1.9.tar.gz": 1
+  },
+  "prerelease": true,
+  "published": "2026-11-27T13:57:05Z"
+ }
+}
