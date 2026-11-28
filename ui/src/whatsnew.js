@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 51, text: "A device's page on a computer no longer scrolls sideways: Now and On the device sit one above the other when the panel is too narrow for both. Scroll bars everywhere are thin and match the look, instead of the browser's grey ones."},
   {id: 50, text: "Adding devices: Make and model now ticks when a device says what it is (it was never ticking, though the device was recognised). A device that joined as New device takes its model's name once it's known, before you accept it."},
   {id: 49, text: "The Home Screen icon fills its whole square, with no dark line along its edges. If you added it before, remove it from your Home Screen and add it again to get the new one."},
   {id: 48, text: "Adding devices: Join near now has The adapter, so a device right next to it can only join there. Anywhere no longer lets devices in through a plug whose own link is weak or that isn't working (it says which), since a device joining through one never finishes. A device whose join got stuck has a Finish joining box at the top of its page: Try again now, Join again through the adapter or a plug, or Remove and add again. Every device page has Remove from the network at the bottom, and shows the device's address (0x…) under its name: tap it to copy.", go: "home"},

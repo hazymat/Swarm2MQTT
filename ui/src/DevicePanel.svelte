@@ -236,7 +236,7 @@
 </div>
 
 <style>
-  .panel{padding:16px;display:flex;flex-direction:column;gap:12px}
+  .panel{padding:16px;display:flex;flex-direction:column;gap:12px;container-type:inline-size;min-width:0}
   .top{display:flex}
   .ptop{display:flex;gap:14px;align-items:center}
   .title{flex:1;min-width:0}
@@ -248,7 +248,8 @@
   .bottom{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.danger{color:var(--red)}
   .move{gap:10px}.move select{max-width:200px}
   .startagain{padding:12px 14px;display:flex;flex-direction:column;gap:6px}.startagain ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.startagain .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+  @container (max-width:640px){.grid2{grid-template-columns:minmax(0,1fr)}} /* side by side only when there is room for both */
   .v{display:flex;align-items:center;gap:8px}
   .reading{font-size:18px;font-weight:500}
   .help{display:block;font-size:12.5px;color:var(--muted);font-weight:400;max-width:42ch;margin-top:2px}

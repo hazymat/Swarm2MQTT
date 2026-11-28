@@ -158,7 +158,7 @@
   .legend i.l{width:22px;height:0;border-width:2px 0 0}
   .legend i.dashed{border-style:dashed}.legend i.solid{border-color:var(--accent)}.legend i.ghost{border-style:dotted;border-color:var(--faint)}
   .near{position:absolute;left:16px;bottom:46px;max-width:60%;background:var(--sheet);border:1px solid var(--glass-border);border-radius:14px;padding:8px 12px;font-size:13px;display:flex;flex-direction:column;gap:3px;box-shadow:var(--shadow)}
-  .right{width:520px;display:flex;flex-direction:column;gap:12px;min-height:0;overflow-y:auto;padding-bottom:70px}
+  .right{width:520px;display:flex;flex-direction:column;gap:12px;min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:70px}
   .waiting{padding:12px;display:flex;flex-direction:column;gap:8px;border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
   .waiting h3{font-size:14px;font-weight:500}
   .searchrow{display:flex;align-items:center;gap:8px;color:var(--muted)}

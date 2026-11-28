@@ -18,6 +18,9 @@ button,a,input,select,textarea,label,summary,[role=button]{touch-action:manipula
 /* phones: boxes at 16px, or iPhone zooms the page in when one is tapped */
 @media (max-width:700px){input,select,textarea{font-size:16px}}
 a{color:inherit;text-decoration:none}
+/* scroll bars: thin, in the glass colours, never the browser's grey ones */
+*{scrollbar-width:thin;scrollbar-color:var(--glass-hover) transparent}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--glass-hover);border-radius:4px}::-webkit-scrollbar-thumb:hover{background:var(--faint)}::-webkit-scrollbar-corner{background:transparent}
 .icon{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .icon.small{width:16px;height:16px}
 kbd{margin-left:4px;padding:1px 5px;font:inherit;font-size:.72em;border:1px solid var(--glass-border);border-radius:6px;opacity:.75}
