@@ -386,10 +386,11 @@ export class App extends EventEmitter {
   // a battery device picks its own parent: open joining on the chosen plug only, ask it to leave and come straight back, and guide a button press
   moving?: {ieee: string; via: string; until: number};
   async moveTo(ieee: string, via: string) {
-    const device = this.need(ieee), plug = this.need(via);
-    await this.join(120, via); this.moving = {ieee, via, until: Date.now() + 120e3};
+    // to a plug, or straight to the adapter (it then joins again, which also finishes a join that got stuck)
+    const device = this.need(ieee), toAdapter = via === this.stickIeee(), target = toAdapter ? "the adapter" : this.need(via).name;
+    await this.join(120, toAdapter && via === "stick" ? undefined : via); this.moving = {ieee, via, until: Date.now() + 120e3};
     this.requireRadio().rejoin(ieee).catch(() => {}); // only heard if it's awake; the button press covers the rest
-    this.log("info", `Moving ${device.name} to ${plug.name}: joining is open on ${plug.name} only for 2 minutes.`, ieee); this.changed();
+    this.log("info", `Moving ${device.name} to ${target}: joining is open on ${target} only for 2 minutes.`, ieee); this.changed();
   }
   moved(ieee: string, parent?: string) {
     const move = this.moving; if (!move || move.ieee !== ieee || !parent) return;
@@ -397,7 +398,17 @@ export class App extends EventEmitter {
     this.moving = undefined; this.join(0).catch(() => {}); this.scanSoon = true; this.scheduleScan(15e3);
     this.log(parent === move.via ? "info" : "warn", parent === move.via ? `${device?.name} now talks through ${name(parent)}.` : `${device?.name} came back through ${name(parent)}, not ${name(move.via)}. Try again with it close to ${name(move.via)}.`, ieee); this.changed();
   }
-  async join(seconds: number, via?: string) {const wasOpen = this.joinEndsAt > Date.now(); await this.requireRadio().permitJoin(seconds, via || undefined); if (seconds && !wasOpen) this.log("info", `Joining opened for ${Math.round(seconds / 60)} min${via ? ` through ${this.store.device(via)?.name ?? via}` : ""}.`); this.joinVia = seconds ? via : undefined; this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed()}
+  // Anywhere = the adapter and every plug, except plugs whose own link is bad: a device joining through one of those never finishes (messages to it get lost)
+  joinSkipped: string[] = [];
+  weakRouter(device: DeviceRow) {const health = this.healthOf(device), signal = this.signals.get(device.ieee), direct = (this.parents().get(device.ieee) ?? this.stickIeee()) === this.stickIeee(); return !health.online || health.status === "bad" || direct && !!signal && signal.rssi < -85} // the adapter measures only the last hop, so its own signal counts only when it talks to the adapter directly
+  async join(seconds: number, via?: string) {
+    const wasOpen = this.joinEndsAt > Date.now(), toAdapter = !!via && via === this.stickIeee(), routers = this.store.devices().filter(device => device.kind === "router" && device.status === "accepted");
+    const skipped = !via && seconds ? routers.filter(device => this.weakRouter(device)) : [];
+    const target = toAdapter ? "adapter" : via ? via : skipped.length ? ["adapter"].concat(routers.filter(device => !skipped.includes(device)).map(device => device.ieee)) : undefined;
+    await this.requireRadio().permitJoin(seconds, target);
+    if (seconds && !wasOpen) this.log("info", `Joining opened for ${Math.round(seconds / 60)} min${toAdapter ? " on the adapter only" : via ? ` through ${this.store.device(via)?.name ?? via}` : ""}${skipped.length ? `, not through ${skipped.map(device => device.name).join(", ")} (${skipped.length === 1 ? "its" : "their"} own link is weak)` : ""}.`);
+    this.joinVia = seconds ? via : undefined; this.joinSkipped = seconds ? skipped.map(device => device.ieee) : []; this.joinEndsAt = seconds ? Date.now() + seconds * 1000 : 0; if (!seconds) this.joinFound = []; this.changed();
+  }
 
   // groups and scenes
   nextId(ids: number[]) {let id = 1; while (ids.includes(id)) id++; return id}
@@ -606,7 +617,7 @@ export class App extends EventEmitter {
     const devices = this.store.devices(), parents = this.parents(), all = new Map(devices.map(device => [device.ieee, device])), latest = this.store.linksAt();
     return {
       version: VERSION, whatsNew: this.whatsNew, update: this.update, sim: this.sim, radio: this.radioStatus.up || this.sim ? this.radioStatus : Object.assign({}, this.radioStatus, {log: adapterLog.slice(-40)}), mqtt: {connected: this.mqtt.connected, error: this.mqtt.error, settings: Object.assign({}, this.mqttSettings, {password: this.mqttSettings.password ? "••••" : ""})}, prefs: this.prefs, stickSet: !!this.stick || this.sim, stick: this.stick ? {path: this.stick.path, adapter: this.stick.adapter} : null,
-      join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia, moving: this.moving && this.moving.until > Date.now() ? this.moving : undefined},
+      join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia, skipped: this.joinSkipped, moving: this.moving && this.moving.until > Date.now() ? this.moving : undefined},
       // how each recent join went, with the verdict in plain words (names filled in)
       joinReports: Array.from(this.joinWatch.reports.values()).map(report => Object.assign({}, report, {verdict: diagnose(report, ieee => ieee ? this.store.device(ieee)?.name ?? ieee : "the adapter")})),
       devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, lastSent: this.mqtt.lastSent(device.ieee), ota: this.radio?.canUpdateFirmware(device.ieee) ?? false, reportable: this.radio?.canSetReporting(device.ieee) ?? false, pending: this.pending.get(device.ieee), firmwareProgress: this.firmwareProgress.get(device.ieee)})),

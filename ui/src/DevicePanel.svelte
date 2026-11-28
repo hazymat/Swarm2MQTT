@@ -37,6 +37,8 @@
   async function saveName() {if (!editingName) return; editingName = false; if (nameDraft.trim() && nameDraft !== device.name) await act("rename", {ieee: device.ieee, name: nameDraft}).catch(() => {})}
   // battery devices choose their own plug; Move it to… steers that choice
   let plugs = $derived(snap.devices.filter(other => other.kind === "router" && other.status === "accepted" && other.health.online && other.ieee !== device.parent));
+  // a join that never finished: started again from scratch, or asked again (at once while a fresh join is still going is just noise)
+  let stuck = $derived(health.fix === "start-again" || !!joinReport?.failing || (!!joinReport && !["ready", "joining"].includes(joinReport.outcome)));
   let nameOfIeee = ieee => !ieee || ieee === snap.stickIeee ? "the adapter" : snap.devices.find(other => other.ieee === ieee)?.name ?? ieee;
   let ownHop = $derived(hopOf(device, snap.stickIeee)), weak = $derived(ownHop.bars >= 3 ? weakUpstream(device, snap.devices, snap.stickIeee) : null);
   let editingNote = $state(false), noteDraft = $state("");
@@ -88,6 +90,7 @@
       {#if editingNote}<input class="text" bind:value={noteDraft} placeholder="What it is, where it is" onblur={saveNote} onkeydown={event => {if (event.key === "Enter") saveNote(); if (event.key === "Escape") {event.stopPropagation(); editingNote = false}}} autofocus>
       {:else}<button class="desc" class:muted={!device.note} onclick={() => {noteDraft = device.note ?? ""; editingNote = true}} title="Edit description">{device.note || makeModel(device) || "Add a description"} <Icon name="edit" small/></button>{/if}
       {#if device.description}<div class="faint small">{device.description}</div>{/if}
+      <button class="ieee" title="Copy its address" onclick={() => navigator.clipboard?.writeText(device.ieee).then(() => toast("Address copied", null)).catch(() => toast("Couldn't copy here", null, "bad"))}><code>{device.ieee}</code><svg class="icon small" viewBox="0 0 24 24"><path d="M9 9h10v10H9zM5 15V5h10"/></svg></button>
     </div>
   </div>
 
@@ -101,15 +104,17 @@
   {:else if health.reason}<div class="callout info"><span class="t">{health.reason}</span></div>{/if}
 
   {#if joinReport && joinReport.outcome !== "ready"}<JoinStatus report={joinReport}/>{/if}
-  {#if !device.model && !device.interviewing && joinReport?.outcome !== "joining"}
+  {#if stuck}
     <div class="startagain card">
-      <b>Start it again</b>
+      <b>Finish joining</b>
       <span class="muted small">Joined {dayClock(device.added_at)}{device.last_seen ? ` · last heard ${ago(device.last_seen, view.now)}` : device.rssi != null ? "" : " · never heard"}{device.rssi != null ? ` · ${device.rssi} dBm` : ""}</span>
-      <ol><li>Remove it: it's taken off the network and out of the adapter.</li><li>Reset it: usually hold its button for 5 to 10 seconds until it blinks.</li><li>It joins again from scratch, step by step.</li></ol>
-      <div class="acts"><button class="pill primary" onclick={() => {const ieee = device.ieee, name = device.name; view.open = null; toast(`Starting ${name} again`, null, "info", () => act("startAgain", {ieee}).then(() => toast("Now reset it: hold its button until it blinks", null)).catch(() => {}))}}>Remove and add again</button>{#if !joinReport?.verdict}<button class="pill ghost" onclick={() => act("joinAgain", {ieee: device.ieee}).then(() => toast(`${device.name} answered`, null)).catch(() => {})}>Just ask it again</button>{/if}</div>
+      <div class="acts"><button class="pill primary" disabled={!snap.radio.up || joinReport?.outcome === "joining" && !joinReport?.failing} onclick={() => act("joinAgain", {ieee: device.ieee}).then(() => toast(`${device.name} answered`, null)).catch(() => {})}>{joinReport?.outcome === "joining" && !joinReport?.failing ? "Asking…" : "Try again now"}</button>{#if device.kind !== "router"}<span class="muted small">Press its button first to wake it.</span>{/if}</div>
+      {#if device.kind !== "router"}<div class="kv move"><span class="k">Join again through</span><select class="text" value="" disabled={!snap.radio.up} onchange={event => {const via = event.currentTarget.value; event.currentTarget.value = ""; if (via) act("moveTo", {ieee: device.ieee, via}).catch(() => {})}}><option value="">Choose…</option>{#if device.parent && device.parent !== snap.stickIeee}<option value={snap.stickIeee}>The adapter</option>{/if}{#each plugs as plug (plug.ieee)}<option value={plug.ieee}>{plug.name}</option>{/each}</select></div>{/if}
+      <span class="muted small">If that doesn't work: Remove and add again takes it off the network and out of the adapter, then opens joining. Reset it (usually hold its button 5 to 10 seconds until it blinks) and it joins from scratch.</span>
+      <div class="acts"><button class="pill ghost" onclick={() => {const ieee = device.ieee, name = device.name; view.open = null; toast(`Starting ${name} again`, null, "info", () => act("startAgain", {ieee}).then(() => toast("Now reset it: hold its button until it blinks", null)).catch(() => {}))}}>Remove and add again</button></div>
     </div>{/if}
-  {#if device.kind !== "router" && device.status === "accepted" && device.model && plugs.length}
-    <div class="kv move"><span class="k">Talks through</span><span>{nameOfIeee(device.parent)}</span><select class="text" value="" onchange={event => {const via = event.currentTarget.value; event.currentTarget.value = ""; if (via) act("moveTo", {ieee: device.ieee, via}).catch(() => {})}}><option value="">Move it to…</option>{#each plugs as plug (plug.ieee)}<option value={plug.ieee}>{plug.name}</option>{/each}</select></div>
+  {#if device.kind !== "router" && device.status === "accepted" && !stuck && (plugs.length || device.parent && device.parent !== snap.stickIeee)}
+    <div class="kv move"><span class="k">Talks through</span><span>{nameOfIeee(device.parent)}</span><select class="text" value="" onchange={event => {const via = event.currentTarget.value; event.currentTarget.value = ""; if (via) act("moveTo", {ieee: device.ieee, via}).catch(() => {})}}><option value="">Move it to…</option>{#if device.parent && device.parent !== snap.stickIeee}<option value={snap.stickIeee}>The adapter</option>{/if}{#each plugs as plug (plug.ieee)}<option value={plug.ieee}>{plug.name}</option>{/each}</select></div>
   {/if}
   {#if !device.supported && device.controls.length}<div class="hint"><span class="t">We don't know this exact model, so these controls are our best guess from what it reports. Remove any that are wrong, or add others below.</span></div>{/if}
 
@@ -219,15 +224,13 @@
     {:else}<button class="link" disabled={!snap.radio.up} onclick={() => act("firmwareCheck", {ieee: device.ieee}).then(available => toast(available ? "An update is available." : available === false ? "It's up to date." : "No firmware updates are published for this model.", null)).catch(() => {})}>Check for an update</button>{/if}
   </div>{/if}
 
-  <button class="link" onclick={() => moreDetails = !moreDetails}>{moreDetails ? "Hide details" : "Details"}</button>
+  <div class="bottom"><button class="link" onclick={() => moreDetails = !moreDetails}>{moreDetails ? "Hide details" : "Details"}</button><button class="pill ghost danger" onclick={remove}>Remove from the network</button></div>
   {#if moreDetails}
     <div class="box details selectable">
-      <div class="kv"><span class="k">IEEE address</span><code>{device.ieee}</code></div>
       <div class="kv"><span class="k">Model</span><code>{device.model ?? "unknown"}</code></div>
       <div class="kv"><span class="k">Kind</span><span>{device.kind === "router" ? "Plugged in, passes messages on" : "Battery, sleeps"}</span></div>
       <div class="kv"><span class="k">Joined</span><span>{dayClock(device.added_at)}</span></div>
       <div class="code"><code>{JSON.stringify(device.state)}</code></div>
-      <button class="pill ghost" style="margin-top:10px" onclick={remove}>Remove from the network</button>
     </div>
   {/if}
 </div>
@@ -241,6 +244,8 @@
   .name :global(.icon){opacity:.5}
   .text.big{font-size:19px}
   .desc{font-size:14px;text-align:left;display:inline-flex;align-items:center;gap:6px;color:var(--text)}.desc.muted{color:var(--muted)}
+  .ieee{display:inline-flex;align-items:center;gap:6px;color:var(--faint);margin-top:2px;text-align:left}.ieee code{color:var(--muted);font-size:12.5px}
+  .bottom{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.danger{color:var(--red)}
   .move{gap:10px}.move select{max-width:200px}
   .startagain{padding:12px 14px;display:flex;flex-direction:column;gap:6px}.startagain ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:2px;font-size:13.5px}.startagain .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}

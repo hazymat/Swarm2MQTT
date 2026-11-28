@@ -8,7 +8,7 @@
   let reportOf = ieee => snap.joinReports?.find(report => report.ieee === ieee);
   // a device that can't be brought closer (a valve on a radiator) joins through the router nearest it instead
   let routers = $derived(snap.devices.filter(device => device.kind === "router" && device.status === "accepted" && device.health.online));
-  let moving = $derived(snap.join.moving), nameOf = ieee => snap.devices.find(device => device.ieee === ieee)?.name ?? "it";
+  let moving = $derived(snap.join.moving), nameOf = ieee => ieee === snap.stickIeee ? "the adapter" : snap.devices.find(device => device.ieee === ieee)?.name ?? "it";
   function joinNear(via) {act("join", {seconds: Math.max(30, Math.round((snap.join.endsAt - Date.now()) / 1000)), via})}
 </script>
 <div class="card joinbox">
@@ -16,8 +16,9 @@
   {#if moving}<div class="callout info"><span class="t">Moving <b>{nameOf(moving.ieee)}</b> to <b>{nameOf(moving.via)}</b>. Hold its button for a second to wake it (or its pairing button until it blinks if that doesn't do it). It keeps its name and settings.</span></div>{/if}
   {#if live.rejoin}<div class="callout info"><span class="t">Waiting for <b>{live.rejoin.name}</b> to come back. Put it in pairing mode and it gets its old name and settings.</span></div>{/if}
   {#if !moving}<p>Put your device in pairing mode now. Usually: hold its button for 5 seconds until it blinks.</p>{/if}
-  {#if routers.length}<label class="near"><span class="muted">Join near</span><select class="text" value={snap.join.via ?? ""} onchange={event => joinNear(event.currentTarget.value)}><option value="">Anywhere</option>{#each routers as router (router.ieee)}<option value={router.ieee}>{router.name}</option>{/each}</select></label>
-  <p class="fieldhint">For a device that can't be moved closer, pick the plugged-in device nearest it: only that one lets it in.</p>{/if}
+  <label class="near"><span class="muted">Join near</span><select class="text" value={snap.join.via ?? ""} onchange={event => joinNear(event.currentTarget.value)}><option value="">Anywhere</option><option value={snap.stickIeee}>The adapter</option>{#each routers as router (router.ieee)}<option value={router.ieee}>{router.name}</option>{/each}</select></label>
+  <p class="fieldhint">Only the one you pick lets it in. The adapter: for a device right next to it. A plug: for a device that can't be moved closer.</p>
+  {#if !snap.join.via && snap.join.skipped?.length}<p class="fieldhint">Not through {snap.join.skipped.map(nameOf).join(", ")}: {snap.join.skipped.length === 1 ? "its" : "their"} own link is weak, so a device joining there wouldn't finish.</p>{/if}
   <div class="warn"><span>⚠</span><span>While this is on, any device nearby can join and is handed your network key, including a neighbour's. It turns itself off after 4 minutes; stop it once your device is in.</span></div>
   <div class="found">
     {#each found as device (device.ieee)}

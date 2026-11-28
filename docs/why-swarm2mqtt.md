@@ -38,3 +38,4 @@ What Swarm2MQTT does that Zigbee2MQTT doesn't, or does for you where Zigbee2MQTT
 - **A description on every device**, the make and model until you write one, and searchable.
 - **Settings in panels**, each with a one-line status; a fault opens its panel.
 - **A device list you arrange your way**: list, tiles or cards, compact or expanded, grouped and sorted as you like, each kind of device showing what matters (room temperature and target, someone there and since when, power with a switch), remembered on each phone.
+- **Joining skips plugs with a bad link**, and you can make a device join on the adapter only; a stuck join can be retried or redone from its own page.

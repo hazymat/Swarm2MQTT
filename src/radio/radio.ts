@@ -32,7 +32,8 @@ export abstract class Radio extends EventEmitter<RadioEvents> {
   abstract start(): Promise<void>;
   abstract stop(): Promise<void>;
   abstract list(): RadioDevice[];
-  abstract permitJoin(seconds: number, viaIeee?: string): Promise<void>;
+  // via: one device ("adapter" = the adapter itself), several (only those let devices in), or none (all of them)
+  abstract permitJoin(seconds: number, via?: string | string[]): Promise<void>;
   abstract reinterview(ieee: string): Promise<void>;
   abstract set(ieee: string, values: Record<string, unknown>): Promise<void>;
   abstract rejoin(ieee: string): Promise<void>; // ask it to leave and come straight back (it then picks its own parent)

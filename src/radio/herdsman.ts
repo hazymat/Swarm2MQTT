@@ -209,7 +209,13 @@ export class HerdsmanRadio extends Radio {
   // asks it to leave; one that doesn't answer is forgotten anyway (here and in the adapter's list), so the slate is clean either way
   async remove(ieee: string) {const device = this.device(ieee); let answered = true; try {await device.removeFromNetwork()} catch {answered = false; device.removeFromDatabase()} this.definitions.delete(ieee); this.states.delete(ieee); return answered}
   // through one router only (a device that can't be moved, near that router), or anywhere
-  async permitJoin(seconds: number, viaIeee?: string) {await this.controller!.permitJoin(seconds, viaIeee ? this.device(viaIeee) : undefined)}
+  async permitJoin(seconds: number, via?: string | string[]) {
+    const controller = this.controller!, coordinator = controller.getDevicesByType("Coordinator")[0], target = (ieee: string) => ieee === "adapter" ? coordinator : this.device(ieee);
+    if (!Array.isArray(via) || !seconds) {await controller.permitJoin(seconds, typeof via === "string" && seconds ? target(via) : undefined); return}
+    // several: the adapter (it also keeps the timer), then each chosen plug on its own
+    await controller.permitJoin(seconds, coordinator);
+    for (const ieee of via) if (ieee !== "adapter") await (controller as any).adapter.permitJoin(seconds, this.device(ieee).networkAddress).catch(() => {});
+  }
   async reinterview(ieee: string) {
     const device = this.device(ieee); this.emit("interview", ieee, "started");
     try {await device.interview(true); await this.resolve(device); await this.configure(device); this.emit("interview", ieee, "successful")} catch (error) {this.emit("joinFailed", ieee, String((error as Error)?.message ?? error)); this.emit("interview", ieee, "failed")}
