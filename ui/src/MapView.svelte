@@ -74,7 +74,7 @@
   {#each links as link (key(link) + "label")}
     {@const child = devices.find(device => device.ieee === link.child)}
     {#if child && at(link.child) && at(link.parent) && !broken(child)}{@const hop = hopOf(child, stickIeee)}{#if hop.text}
-      <text class="hoplabel bars{hop.bars}" x={(at(link.parent).x + at(link.child).x) / 2} y={(at(link.parent).y + at(link.child).y) / 2 + 4} text-anchor="middle"><title>{HOP_WORDS[hop.bars]} signal between {child.name} and what it talks through</title>{hop.text.replace("link quality ", "LQ ")}</text>
+      <text class="hoplabel bars{hop.bars}" role="button" tabindex="-1" onclick={() => onpick?.(child.ieee)} onpointerdown={event => event.stopPropagation()} x={(at(link.parent).x + at(link.child).x) / 2} y={(at(link.parent).y + at(link.child).y) / 2 + 4} text-anchor="middle"><title>{HOP_WORDS[hop.bars]} signal between {child.name} and what it talks through. Click for its route and what to do.</title>{hop.text.replace("link quality ", "LQ ")}</text>
     {/if}{/if}
   {/each}
   {#if joining}{#each devices.filter(device => device.kind === "router" && device.health.online) as device}{#if at(device.ieee)}{#each [34, 54, 76] as radius, index}<circle class="beacon" cx={at(device.ieee).x} cy={at(device.ieee).y} r={radius} style="animation-delay:{index * .35}s"/>{/each}{/if}{/each}
@@ -107,8 +107,8 @@
   svg{width:100%;height:100%;display:block;touch-action:none;cursor:grab}
   .fit{position:absolute;right:12px;bottom:12px;z-index:1}
   .link{stroke:var(--line);stroke-linecap:round}
-  .link.bars1{stroke:color-mix(in srgb,var(--red) 70%,var(--line))}.link.bars2{stroke:color-mix(in srgb,var(--amber) 70%,var(--line))}.link.bars3,.link.bars4{stroke:color-mix(in srgb,var(--green) 60%,var(--line))}
-  .hoplabel{font-size:11px;font-weight:600;fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round;pointer-events:auto}.hoplabel.bars1{fill:var(--red)}.hoplabel.bars2{fill:var(--amber)}.hoplabel.bars3,.hoplabel.bars4{fill:var(--green)}
+  .link.bars1{stroke:color-mix(in srgb,var(--red) 70%,var(--line));stroke-dasharray:5 5}.link.bars2{stroke:color-mix(in srgb,var(--amber) 70%,var(--line))}.link.bars3,.link.bars4{stroke:color-mix(in srgb,var(--green) 60%,var(--line))}
+  .hoplabel{font-size:11px;font-weight:600;fill:var(--muted);paint-order:stroke;stroke:var(--bg);stroke-width:4px;stroke-linejoin:round;pointer-events:auto;cursor:pointer}.hoplabel.bars1{fill:var(--red)}.hoplabel.bars2{fill:var(--amber)}.hoplabel.bars3,.hoplabel.bars4{fill:var(--green)}
   .link.stale{stroke-dasharray:7 6;opacity:.7}
   .link.broken{stroke:color-mix(in srgb,var(--red) 45%,transparent);stroke-dasharray:6 6}
   .ghost{stroke:var(--faint);stroke-width:2;stroke-dasharray:3 7;opacity:.6}
