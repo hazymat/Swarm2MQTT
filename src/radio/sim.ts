@@ -1,13 +1,13 @@
 // Fake adapter and devices, so the app runs (and can be shown) without any Zigbee hardware
 import {Radio, type ReportLevel, type Reporting, type Control, type Link, type RadioDevice, type ScanProgress} from "./radio.js";
 
-const onOff: Control = {property: "state", label: "On/off", type: "binary", writable: true, readable: true, on: "ON", off: "OFF"};
-const brightness: Control = {property: "brightness", label: "Brightness", type: "numeric", writable: true, readable: true, min: 0, max: 254};
-const power: Control = {property: "power", label: "Power", type: "numeric", writable: false, readable: true, unit: "W"};
+const onOff: Control = {property: "state", label: "On/off", help: "On/off state of this light or switch", type: "binary", writable: true, readable: true, on: "ON", off: "OFF"};
+const brightness: Control = {property: "brightness", label: "Brightness", help: "Brightness of this light", type: "numeric", writable: true, readable: true, min: 0, max: 254};
+const power: Control = {property: "power", label: "Power", help: "Instantaneous measured power", type: "numeric", writable: false, readable: true, unit: "W"};
 const battery: Control = {property: "battery", label: "Battery", type: "numeric", writable: false, readable: true, unit: "%", min: 0, max: 100};
 const occupancy: Control = {property: "occupancy", label: "Motion", type: "binary", writable: false, readable: true, on: true, off: false};
-const sensitivity: Control = {property: "sensitivity", label: "Sensitivity", type: "enum", writable: true, readable: true, values: ["low", "medium", "high"], setting: true};
-const keepTime: Control = {property: "keep_time", label: "Hold for", type: "enum", writable: true, readable: true, values: ["30", "60", "120"], setting: true};
+const sensitivity: Control = {property: "sensitivity", label: "Sensitivity", help: "How sensitive it is to presence", type: "enum", writable: true, readable: true, values: ["low", "medium", "high"], setting: true};
+const keepTime: Control = {property: "keep_time", label: "Hold for", help: "Seconds it keeps saying occupied after the last movement", type: "enum", writable: true, readable: true, values: ["30", "60", "120"], setting: true};
 const temperature: Control = {property: "temperature", label: "Temperature", type: "numeric", writable: false, readable: true, unit: "°C"};
 const contact: Control = {property: "contact", label: "Closed", type: "binary", writable: false, readable: true, on: true, off: false};
 

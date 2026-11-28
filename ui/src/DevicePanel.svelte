@@ -42,6 +42,9 @@
   let editingNote = $state(false), noteDraft = $state("");
   async function saveNote() {if (!editingNote) return; editingNote = false; if (noteDraft.trim() !== (device.note ?? "")) await act("note", {ieee: device.ieee, note: noteDraft}).catch(() => {})}
   async function saveTopic() {if (!editingTopic) return; editingTopic = false; if (topicDraft.trim() && topicDraft !== device.topic) await act("topic", {ieee: device.ieee, topic: topicDraft}).catch(() => {})}
+  // every value with a description has the same small ⓘ; its line shows only when asked for
+  let helpOpen = $state(new Set());
+  function toggleHelp(property) {const next = new Set(helpOpen); if (!next.delete(property)) next.add(property); helpOpen = next}
   const REPORT_LEVELS = [["normal", "Normal"], ["more", "More often"], ["most", "Most often"]];
   // what the device agreed to, read back from it: "on any change (at most every 1 s), and at least every 1 min"
   const reportText = value => `on ${value.change === "any" ? "any change" : value.change ? `a ${value.change} change` : "a change"}${value.min ? ` (at most every ${duration(value.min * 1000)})` : ""}, and at least every ${duration(value.max * 1000)}`;
@@ -115,7 +118,7 @@
       <h3>Now <span class="faint">{ago(device.last_seen, view.now)}</span></h3>
       {#each readings as control (control.property)}
         <div class="kv">
-          <span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}{@render pendingLine(control)}{#if control.guessed}<span class="guess" title="Our best guess from what the device reports">guessed</span>{/if}</span>
+          <span class="k">{control.label}{#if control.help}<button class="info" class:on={helpOpen.has(control.property)} aria-label="What is this?" aria-expanded={helpOpen.has(control.property)} onclick={() => toggleHelp(control.property)}>i</button>{#if helpOpen.has(control.property)}<span class="help">{control.help}</span>{/if}{/if}{@render pendingLine(control)}{#if control.guessed}<span class="guess" title="Our best guess from what the device reports">guessed</span>{/if}</span>
           <span class="v">
             {#if control.writable && control.type === "binary"}<button class="switch" class:on={valueOf(control) === control.on} onclick={() => setValue(control, valueOf(control) === control.on ? control.off : control.on)} aria-label={control.label}></button>
             {:else if control.writable && control.type === "numeric"}<NumberControl {control} value={valueOf(control)} onset={number => setValue(control, number)}/>
@@ -134,7 +137,7 @@
       <div class="box">
         <h3>On the device</h3>
         {#each moreSettings ? settings : common as control (control.property)}
-          <div class="kv"><span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}{@render pendingLine(control)}</span>
+          <div class="kv"><span class="k">{control.label}{#if control.help}<button class="info" class:on={helpOpen.has(control.property)} aria-label="What is this?" aria-expanded={helpOpen.has(control.property)} onclick={() => toggleHelp(control.property)}>i</button>{#if helpOpen.has(control.property)}<span class="help">{control.help}</span>{/if}{/if}{@render pendingLine(control)}</span>
             {#if control.type === "enum"}<span class="seg">{#each control.values as value}<button class:on={String(valueOf(control)) === String(value)} onclick={() => setValue(control, value)}>{valueText(null, value)}</button>{/each}</span>
             {:else if control.type === "binary"}<button class="switch" class:on={valueOf(control) === control.on} onclick={() => setValue(control, valueOf(control) === control.on ? control.off : control.on)} aria-label={control.label}></button>
             {:else if control.type === "numeric"}<NumberControl {control} value={valueOf(control)} onset={number => setValue(control, number)}/>
@@ -243,7 +246,9 @@
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .v{display:flex;align-items:center;gap:8px}
   .reading{font-size:18px;font-weight:500}
-  .help{display:block;font-size:12.5px;color:var(--faint);font-weight:400;max-width:34ch;margin-top:1px}
+  .help{display:block;font-size:12.5px;color:var(--muted);font-weight:400;max-width:42ch;margin-top:2px}
+  .info{display:inline-grid;place-items:center;width:17px;height:17px;margin-left:6px;border-radius:50%;border:1px solid var(--glass-border);color:var(--faint);font:600 11px/1 Georgia,serif;font-style:italic;vertical-align:2px}
+  .info.on,.info:hover{color:var(--text);border-color:var(--active-border)}
   .x{color:var(--faint);font-size:12px;padding:2px 4px;opacity:0}
   .kv:hover .x{opacity:1}
   @media (hover:none){.x{opacity:1}}

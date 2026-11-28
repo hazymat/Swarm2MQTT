@@ -8,7 +8,7 @@ import {stepFromLog} from "../joinwatch.js";
 export interface StickConfig {path: string; adapter: "ember" | "zstack"; baudRate?: number; rtscts?: boolean; panId: number; extendedPanId: number[]; channel: number; networkKey: number[]; formNew?: boolean}
 const OTA_SETTINGS = {requestTimeout: 150000, responseDelay: 250, baseSize: 50};
 
-// Plain names for the Zigbee spec's jargon, whichever device uses it, with a line on why you'd change it
+// Plain names for the Zigbee spec's jargon, whichever device uses it; help replaces the library's description where that's jargon too
 const PLAIN: Record<string, {label: string; help?: string}> = {
   occupied_heating_setpoint: {label: "Target temperature"},
   unoccupied_heating_setpoint: {label: "Away temperature", help: "Used while the valve is in away mode."},
@@ -31,6 +31,12 @@ const REPORTABLE = [
 ];
 // every level: [least often s, most often s, change multiplier]; Normal falls back to this when the device's own setup doesn't set it
 const LEVELS: Record<ReportLevel, {min: number; max: number; change: number}> = {normal: {min: 10, max: 3600, change: 5}, more: {min: 5, max: 300, change: 1}, most: {min: 1, max: 60, change: 0}};
+// every value's ⓘ line: the library's own description, tidied (sentences run together, the other app's name); none when it only repeats the name
+export function helpFor(expose: any, label: string) {
+  const plain = PLAIN[expose.property]?.help; if (plain) return plain;
+  const text = String(expose.description ?? "").replace(/\.(?=[A-Z])/g, ". ").replace(/Zigbee2MQTT/g, "Swarm2MQTT").trim();
+  return text && text.toLowerCase().replace(/[^a-z]/g, "") !== label.toLowerCase().replace(/[^a-z]/g, "") ? text : undefined;
+}
 // Flatten the library's exposes (lights, switches, composites) into simple controls
 export function toControls(exposes: any[], guessed: boolean): Control[] {
   const controls: Control[] = [];
@@ -38,7 +44,7 @@ export function toControls(exposes: any[], guessed: boolean): Control[] {
     if (expose.features?.length && expose.type !== "composite") {for (const feature of expose.features) walk(feature); return}
     if (!expose.property || controls.some(control => control.property === expose.property)) return;
     const type = expose.type === "binary" || expose.type === "numeric" || expose.type === "enum" ? expose.type : "text";
-    controls.push({property: expose.property, label: PLAIN[expose.property]?.label ?? expose.label ?? expose.name, help: PLAIN[expose.property]?.help, type, readable: !!(expose.access & 1), writable: !!(expose.access & 2), unit: expose.unit, min: expose.value_min, max: expose.value_max, step: expose.value_step, values: expose.values, on: expose.value_on, off: expose.value_off, setting: expose.category === "config", guessed: guessed || undefined});
+    controls.push({property: expose.property, label: PLAIN[expose.property]?.label ?? expose.label ?? expose.name, help: helpFor(expose, PLAIN[expose.property]?.label ?? expose.label ?? expose.name), type, readable: !!(expose.access & 1), writable: !!(expose.access & 2), unit: expose.unit, min: expose.value_min, max: expose.value_max, step: expose.value_step, values: expose.values, on: expose.value_on, off: expose.value_off, setting: expose.category === "config", guessed: guessed || undefined});
   };
   for (const expose of exposes) walk(expose);
   return controls;

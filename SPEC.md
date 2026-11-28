@@ -64,6 +64,7 @@ Every complaint from Mat's original rant, turned into a requirement. Each has a 
 | P26 | **Groups that make sense** | "What is a group? Why might I want one?" | Groups page leads with "Turn several lights on together, instantly, with no popcorn effect." Creating one starts from selecting devices on the map. |
 | P27 | **Four menu items, not fourteen** | Eight top items + cog + sub-tabs + sub-sub-tabs | Home, Groups, Activity, Settings: a sidebar on a computer, a bar at the bottom on a phone. No second row of tabs anywhere. |
 | P28 | **Advanced stays out of the way** | Blocklist, adapter delay, extended PAN ID next to everyday settings | Niche options live under one collapsed "Advanced" section at the bottom of Settings. |
+| P25b | **Every value explains itself the same way** | Some values explained, others not | Every value on every device with a description gets the same small ⓘ beside its name; tapping it shows one line. The line is the device library's description, tidied, or our plain wording where that is jargon. Never text added for one device or value only. |
 | P29 | **Looks like it was designed** | "Crappy looking UI" | A consistent look and behaviour (§3.0). Mockups approved by Mat before any UI is built. |
 
 ### Everything you had before
