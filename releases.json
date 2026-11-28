@@ -344,10 +344,17 @@
  },
  "v0.1.57": {
   "assets": {
-   "swarm2mqtt-v0.1.57.tar.gz": 0
+   "swarm2mqtt-v0.1.57.tar.gz": 1
   },
   "prerelease": true,
   "published": "2026-11-28T01:22:00Z"
+ },
+ "v0.1.58": {
+  "assets": {
+   "swarm2mqtt-v0.1.58.tar.gz": 2
+  },
+  "prerelease": true,
+  "published": "2026-11-28T01:29:30Z"
  },
  "v0.1.6": {
   "assets": {
