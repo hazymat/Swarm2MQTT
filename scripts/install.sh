@@ -11,7 +11,7 @@ need_node() { local version; version=$(node -v 2>/dev/null | sed 's/v//') || tru
 if [ -z "$tag" ]; then
   api=https://api.github.com/repos/$REPO/releases
   # read the whole reply first: grep stopping early would make curl fail under pipefail
-  if [ "$channel" = dev ]; then releases=$(curl -fsSL "$api") || { echo "Couldn't reach GitHub."; exit 1; }; else releases=$(curl -fsSL "$api/latest") || { echo "Couldn't reach GitHub."; exit 1; }; fi
+  if [ "$channel" = dev ]; then releases=$(curl -fsSL "$api") || { echo "Couldn't reach GitHub."; exit 1; }; else releases=$(curl -fsSL "$api/latest" || curl -fsSL "$api") || { echo "Couldn't reach GitHub."; exit 1; }; fi  # no stable release yet: newest dev one
   tag=$(printf '%s\n' "$releases" | grep '"tag_name"' | sed -n 1p | cut -d'"' -f4)
 fi
 [ -n "$tag" ] || { echo "No release found."; exit 1; }
@@ -25,7 +25,10 @@ fi
 target="$DIR/releases/$tag"
 if [ ! -f "$target/dist/main.js" ]; then
   rm -rf "$target.tmp"; mkdir -p "$target.tmp"
-  curl -fsSL "https://github.com/$REPO/releases/download/$tag/swarm2mqtt-$tag.tar.gz" | tar -xz -C "$target.tmp"
+  # fresh installs fetch the -install copy (counted as installs on the website); updates and older releases the plain one
+  base_url="https://github.com/$REPO/releases/download/$tag/swarm2mqtt-$tag"
+  if [ "$mode" = install ] && curl -fsSL "$base_url-install.tar.gz" -o "$target.tmp/release.tar.gz" 2>/dev/null; then :; else curl -fsSL "$base_url.tar.gz" -o "$target.tmp/release.tar.gz"; fi
+  tar -xzf "$target.tmp/release.tar.gz" -C "$target.tmp"; rm -f "$target.tmp/release.tar.gz"
   (cd "$target.tmp" && npm ci --omit=dev --no-audit --no-fund --loglevel=error)
   mv "$target.tmp" "$target"
 fi
