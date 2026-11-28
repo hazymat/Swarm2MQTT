@@ -13,7 +13,7 @@ import {translate} from "./errors.js";
 
 const newerThan = (candidate: string, current: string) => {const left = candidate.split(".").map(Number), right = current.split(".").map(Number); for (let index = 0; index < 3; index++) if ((left[index] ?? 0) !== (right[index] ?? 0)) return (left[index] ?? 0) > (right[index] ?? 0); return false};
 export const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
-const REPORT_WORDS: Record<ReportLevel, string> = {normal: "normally", more: "more often", most: "as often as possible"};
+const REPORT_WORDS: Record<ReportLevel, string> = {normal: "normally", more: "more often", most: "most often"};
 // pending changes: how long to wait for the device to confirm (sleepy devices answer when they next check in), how long a late match still counts, how long an ending stays on screen
 const WAIT_MS = 15e3, WAIT_SLEEPY_MS = 90e3, LATE_MS = 10 * 60e3, LATE_SLEEPY_MS = 2 * 3600e3, SHOWN_MS = 6e3;
 export interface Pending {wanted: unknown; was: unknown; at: number; step?: number; phase: "sending" | "waiting" | "set" | "other" | "none" | "failed"; latest?: unknown; ended?: number}

@@ -42,7 +42,7 @@
   let editingNote = $state(false), noteDraft = $state("");
   async function saveNote() {if (!editingNote) return; editingNote = false; if (noteDraft.trim() !== (device.note ?? "")) await act("note", {ieee: device.ieee, note: noteDraft}).catch(() => {})}
   async function saveTopic() {if (!editingTopic) return; editingTopic = false; if (topicDraft.trim() && topicDraft !== device.topic) await act("topic", {ieee: device.ieee, topic: topicDraft}).catch(() => {})}
-  const REPORT_LEVELS = [["normal", "Normal"], ["more", "More often"], ["most", "As often as possible"]];
+  const REPORT_LEVELS = [["normal", "Normal"], ["more", "More often"], ["most", "Most often"]];
   // what the device agreed to, read back from it: "on any change (at most every 1 s), and at least every 1 min"
   const reportText = value => `on ${value.change === "any" ? "any change" : value.change ? `a ${value.change} change` : "a change"}${value.min ? ` (at most every ${duration(value.min * 1000)})` : ""}, and at least every ${duration(value.max * 1000)}`;
   function setReporting(level) {act("setReporting", {ieee: device.ieee, level}).then(result => {const kept = result.values.filter(value => !value.ok).map(value => value.name.toLowerCase()); if (kept.length) toast(`${device.name} kept its own schedule for ${kept.join(" and ")}.`, null, "bad")}).catch(() => {})}
@@ -192,6 +192,10 @@
       <div class="kv wrap"><span class="k">Format</span><span class="seg">{#each [["json", "One message"], ["values", "Topic per value"], ["both", "Both"]] as [format, label]}<button class:on={device.format === format} onclick={() => act("format", {ieee: device.ieee, format})}>{label}</button>{/each}</span></div>
       <div class="kv wrap"><span class="k">Names</span><span>{renamedCount ? `${renamedCount} ${renamedCount === 1 ? "value" : "values"} renamed` : "As the device names them"} <button class="link" onclick={() => moreRenames = !moreRenames}>{moreRenames ? "Done" : "Change"}</button></span></div>
       {#if moreRenames}{#each Object.keys(device.state) as key}<div class="kv"><span class="k">{key}</span><input class="text half" placeholder={key} bind:value={renames[key]} onchange={() => act("renames", {ieee: device.ieee, renames: $state.snapshot(renames)}).then(() => toast("Saved", null)).catch(() => {})}></div>{/each}{/if}
+      {#if device.reportable}<div class="kv wrap"><span class="k">How often</span><span class="seg">{#each REPORT_LEVELS as [level, word]}<button class:on={(device.reporting?.level ?? "normal") === level} disabled={!snap.radio.up} onclick={() => setReporting(level)}>{word}</button>{/each}</span></div>
+        {#if device.kind === "battery"}<p class="small">On batteries, More often uses noticeably more battery, and Most often can flatten them in weeks.</p>{/if}
+        {#if device.reporting}<ul class="reports">{#each device.reporting.values as value}<li><b>{value.name}</b> {value.ok ? reportText(value) : "keeps its own schedule"}</li>{/each}</ul>{/if}
+      {/if}
     </div>
     <SentMessages {device} {base}/>
   {/if}
@@ -203,14 +207,6 @@
       <div class="kv"><select class="text" bind:value={bindTarget}><option value="">Choose a light or group…</option>{#each snap.groups as group}<option value={"group:" + group.id}>{group.name} (group)</option>{/each}{#each snap.devices.filter(other => other.ieee !== device.ieee && other.controls.some(control => control.property === "state")) as other}<option value={other.ieee}>{other.name}</option>{/each}</select><button class="pill" disabled={!bindTarget} onclick={() => {act("bind", {from: device.ieee, to: bindTarget}); bindTarget = ""}}>Connect</button></div>
     </div>
   {/if}
-
-  {#if device.reportable}<div class="box">
-    <h3>How often it reports</h3>
-    <span class="seg">{#each REPORT_LEVELS as [level, word]}<button class:on={(device.reporting?.level ?? "normal") === level} disabled={!snap.radio.up} onclick={() => setReporting(level)}>{word}</button>{/each}</span>
-    {#if device.kind === "battery"}<p class="small">On batteries, More often uses noticeably more battery, and As often as possible can flatten them in weeks.</p>{/if}
-    {#if device.reporting}<ul class="reports">{#each device.reporting.values as value}<li><b>{value.name}</b> {value.ok ? reportText(value) : "keeps its own schedule"}</li>{/each}</ul>
-    {:else}<p class="small">Normal is the device's own schedule.</p>{/if}
-  </div>{/if}
 
   {#if device.ota}<div class="box">
     <h3>Firmware <span class="faint">{device.firmware ?? "version unknown"}</span></h3>
