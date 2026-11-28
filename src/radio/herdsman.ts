@@ -2,7 +2,7 @@
 import {Controller, setLogger, setOtaConfiguration} from "zigbee-herdsman";
 import * as zhc from "zigbee-herdsman-converters";
 import {createRequire} from "node:module";
-import {Radio, type Control, type Kind, type Link, type RadioDevice, type ScanProgress} from "./radio.js";
+import {Radio, type ReportLevel, type Reporting, type Control, type Kind, type Link, type RadioDevice, type ScanProgress} from "./radio.js";
 import {stepFromLog} from "../joinwatch.js";
 
 export interface StickConfig {path: string; adapter: "ember" | "zstack"; baudRate?: number; rtscts?: boolean; panId: number; extendedPanId: number[]; channel: number; networkKey: number[]; formNew?: boolean}
@@ -15,6 +15,22 @@ const PLAIN: Record<string, {label: string; help?: string}> = {
   local_temperature: {label: "Temperature", help: "Measured at the valve."},
   local_temperature_calibration: {label: "Temperature correction", help: "The valve sits by the radiator, so it often reads warmer than the room. Lower this if the room ends up cooler than you set."},
 };
+// Measured values whose reporting Zigbee lets you set (on/off and levels already report every change straight away).
+// scale: device units per shown unit, where it's the same on every device; more: the change that counts for "More often", in device units
+const REPORTABLE = [
+  {cluster: "msTemperatureMeasurement", attribute: "measuredValue", name: "Temperature", scale: 100, unit: "°C", more: 10},
+  {cluster: "hvacThermostat", attribute: "localTemp", name: "Temperature", scale: 100, unit: "°C", more: 10},
+  {cluster: "hvacThermostat", attribute: "pIHeatingDemand", name: "Valve opening", scale: 1, unit: "%", more: 1},
+  {cluster: "msRelativeHumidity", attribute: "measuredValue", name: "Humidity", scale: 100, unit: "%", more: 100},
+  {cluster: "msPressureMeasurement", attribute: "measuredValue", name: "Pressure", scale: 1, unit: "hPa", more: 1},
+  {cluster: "msIlluminanceMeasurement", attribute: "measuredValue", name: "Light", more: 500},
+  {cluster: "haElectricalMeasurement", attribute: "activePower", name: "Power", more: 5},
+  {cluster: "haElectricalMeasurement", attribute: "rmsCurrent", name: "Current", more: 50},
+  {cluster: "haElectricalMeasurement", attribute: "rmsVoltage", name: "Voltage", more: 2},
+  {cluster: "seMetering", attribute: "currentSummDelivered", name: "Energy", more: 10},
+];
+// every level: [least often s, most often s, change multiplier]; Normal falls back to this when the device's own setup doesn't set it
+const LEVELS: Record<ReportLevel, {min: number; max: number; change: number}> = {normal: {min: 10, max: 3600, change: 5}, more: {min: 5, max: 300, change: 1}, most: {min: 1, max: 60, change: 0}};
 // Flatten the library's exposes (lights, switches, composites) into simple controls
 export function toControls(exposes: any[], guessed: boolean): Control[] {
   const controls: Control[] = [];
@@ -245,6 +261,25 @@ export class HerdsmanRadio extends Radio {
   async sceneRecall(groupId: number, sceneId: number) {await this.controller!.getGroupByID(groupId)!.command("genScenes", "recall", {groupid: groupId, sceneid: sceneId}, {})}
   otaMetas(ieee: string) {const ota = this.definitions.get(ieee)?.ota; return typeof ota === "object" ? ota : {}}
   canUpdateFirmware(ieee: string) {return !!this.definitions.get(ieee)?.ota && !!this.controller?.getDeviceByIeeeAddr(ieee)?.endpoints.some((endpoint: any) => endpoint.supportsOutputCluster("genOta"))}
+  reportable(ieee: string) {const device = this.controller?.getDeviceByIeeeAddr(ieee); if (!device) return []; const found: {endpoint: any; item: typeof REPORTABLE[number]}[] = []; for (const endpoint of device.endpoints) for (const item of REPORTABLE) if (endpoint.supportsInputCluster(item.cluster) && !found.some(other => other.item.name === item.name)) found.push({endpoint, item}); return found}
+  canSetReporting(ieee: string) {return this.reportable(ieee).length > 0}
+  // Normal = the device's own setup from the library (else a calm default); then each value is read back so the page shows what the device actually agreed to
+  async setReporting(ieee: string, level: ReportLevel): Promise<Reporting[]> {
+    const device = this.device(ieee), definition = this.definitions.get(ieee), coordinator = this.controller!.getDevicesByType("Coordinator")[0]?.getEndpoint(1), within = <T>(work: Promise<T>) => Promise.race([work, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("No answer")), 20000))]);
+    if (level === "normal" && definition?.configure) await within(definition.configure(device, coordinator, definition)).catch(() => {});
+    const out: Reporting[] = [];
+    for (const {endpoint, item} of this.reportable(ieee)) {
+      const preset = LEVELS[level], change = preset.change ? item.more * preset.change : 1;
+      try {
+        if (level !== "normal" || !definition?.configure) {await within(endpoint.bind(item.cluster, coordinator)).catch(() => {}); await within(endpoint.configureReporting(item.cluster, [{attribute: item.attribute, minimumReportInterval: preset.min, maximumReportInterval: preset.max, reportableChange: change}] as any))}
+        const answer: any = await within(endpoint.readReportingConfig(item.cluster, [{attribute: item.attribute}] as any)), record = Array.isArray(answer) ? answer[0] : answer;
+        if (!record || record.status) {out.push({name: item.name, ok: false}); continue}
+        const shownChange = typeof record.repChange === "number" ? (item.scale ? `${Math.round(record.repChange / item.scale * 100) / 100} ${item.unit}`.replace(" %", "%") : record.repChange <= 1 ? "any" : undefined) : undefined;
+        out.push({name: item.name, ok: true, min: record.minRepIntval, max: record.maxRepIntval, change: shownChange});
+      } catch {out.push({name: item.name, ok: false})}
+    }
+    return out;
+  }
   async checkFirmware(ieee: string) {const result = await this.device(ieee).checkOta({}, undefined, this.otaMetas(ieee)); return result.availableMeta ? result.available : null}
   async updateFirmware(ieee: string, progress: (percent: number, secondsLeft?: number) => void) {await this.device(ieee).updateOta({}, undefined, undefined, this.otaMetas(ieee), (percent, remaining) => progress(percent, remaining), OTA_SETTINGS)}
   // energy scan isn't exposed by herdsman for every adapter; without it the channel is left to the default list (§12)

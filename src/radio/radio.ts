@@ -5,6 +5,9 @@ export type Kind = "stick" | "router" | "battery";
 // Simplified control description, flattened from the device library's "exposes"
 export interface Control {property: string; label: string; help?: string; type: "binary" | "numeric" | "enum" | "text"; writable: boolean; readable: boolean; unit?: string; min?: number; max?: number; step?: number; values?: (string | number)[]; on?: unknown; off?: unknown; setting?: boolean; guessed?: boolean}
 export interface RadioDevice {ieee: string; nwk: number; kind: Kind; model?: string; vendor?: string; description?: string; supported: boolean; controls: Control[]; interviewing: boolean; firmware?: string}
+// how often a device reports a measured value, as read back from the device after a change
+export type ReportLevel = "normal" | "more" | "most";
+export interface Reporting {name: string; ok: boolean; min?: number; max?: number; change?: string}
 export interface Link {child: string; parent: string; lqi?: number; seen?: number} // seen: when this link was last actually reported (older than the snapshot = carried over from a router that didn't answer)
 // the map check, as it goes: which plugged-in device is being asked, who answered (and how many it hears), who didn't
 export interface ScanProgress {asking?: string; done: number; total: number; answered: {ieee: string; hears: number}[]; silent: string[]; retrying?: boolean}
@@ -44,6 +47,8 @@ export abstract class Radio extends EventEmitter<RadioEvents> {
   abstract sceneRecall(groupId: number, sceneId: number): Promise<void>;
   abstract checkFirmware(ieee: string): Promise<boolean | null>; // null: no firmware published for this model
   canUpdateFirmware(ieee: string): boolean {return true}
+  canSetReporting(ieee: string): boolean {return false}
+  async setReporting(ieee: string, level: ReportLevel): Promise<Reporting[]> {return []}
   abstract updateFirmware(ieee: string, progress: (percent: number, secondsLeft?: number) => void): Promise<void>;
   abstract scanChannels(): Promise<Record<number, number>>;
 }

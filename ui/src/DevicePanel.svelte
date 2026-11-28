@@ -42,6 +42,10 @@
   let editingNote = $state(false), noteDraft = $state("");
   async function saveNote() {if (!editingNote) return; editingNote = false; if (noteDraft.trim() !== (device.note ?? "")) await act("note", {ieee: device.ieee, note: noteDraft}).catch(() => {})}
   async function saveTopic() {if (!editingTopic) return; editingTopic = false; if (topicDraft.trim() && topicDraft !== device.topic) await act("topic", {ieee: device.ieee, topic: topicDraft}).catch(() => {})}
+  const REPORT_LEVELS = [["normal", "Normal"], ["more", "More often"], ["most", "As often as possible"]];
+  // what the device agreed to, read back from it: "on any change (at most every 1 s), and at least every 1 min"
+  const reportText = value => `on ${value.change === "any" ? "any change" : value.change ? `a ${value.change} change` : "a change"}${value.min ? ` (at most every ${duration(value.min * 1000)})` : ""}, and at least every ${duration(value.max * 1000)}`;
+  function setReporting(level) {act("setReporting", {ieee: device.ieee, level}).then(result => {const kept = result.values.filter(value => !value.ok).map(value => value.name.toLowerCase()); if (kept.length) toast(`${device.name} kept its own schedule for ${kept.join(" and ")}.`, null, "bad")}).catch(() => {})}
   function setValue(control, value) {act(control.setting ? "setting" : "set", control.setting ? {ieee: device.ieee, property: control.property, value} : {ieee: device.ieee, values: {[control.property]: value}}).catch(() => {})}
   let renames = $state({});
   $effect(() => {renames = Object.assign({}, device.renames)});
@@ -183,6 +187,14 @@
     </div>
   {/if}
 
+  {#if device.reportable}<div class="box">
+    <h3>How often it reports</h3>
+    <span class="seg">{#each REPORT_LEVELS as [level, word]}<button class:on={(device.reporting?.level ?? "normal") === level} disabled={!snap.radio.up} onclick={() => setReporting(level)}>{word}</button>{/each}</span>
+    {#if device.kind === "battery"}<p class="small">On batteries, More often uses noticeably more battery, and As often as possible can flatten them in weeks.</p>{/if}
+    {#if device.reporting}<ul class="reports">{#each device.reporting.values as value}<li><b>{value.name}</b> {value.ok ? reportText(value) : "keeps its own schedule"}</li>{/each}</ul>
+    {:else}<p class="small">Normal is the device's own schedule.</p>{/if}
+  </div>{/if}
+
   {#if device.ota}<div class="box">
     <h3>Firmware <span class="faint">{device.firmware ?? "version unknown"}</span></h3>
     {#if fw && fw.percent > 0}<div class="progress"><i style="width:{fw.percent}%"></i></div><p class="small">Updating… {Math.round(fw.percent)}%{fw.secondsLeft ? `, about ${duration(fw.secondsLeft * 1000)} left` : ""}. Keep it powered.</p>
@@ -240,6 +252,8 @@
   .keys i.gap{background:var(--glass);border:1px solid var(--glass-border)}
   .small{font-size:13.5px;color:var(--muted);margin-bottom:6px}
   .small b{color:var(--text)}
+  .reports{margin:8px 0 0;padding-left:18px;font-size:13.5px;color:var(--muted);display:flex;flex-direction:column;gap:2px}.reports b{color:var(--text);font-weight:500}
+  .box > .seg + .small{margin-top:8px}
   .num{width:80px}
   .half{width:55%}
   .override{display:flex;gap:6px;align-items:center}.override .link{align-self:center}

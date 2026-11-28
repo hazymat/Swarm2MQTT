@@ -77,6 +77,7 @@ async function command(app: App, name: string, args: any): Promise<unknown> {
     case "sceneDelete": return app.deleteScene(args.id);
     case "bind": return app.bind(args.from, args.to, !!args.remove);
     case "firmwareCheck": return app.checkFirmware(args.ieee);
+    case "setReporting": return app.setReporting(args.ieee, args.level);
     case "firmwareUpdate": return app.updateFirmware(args.ieee);
     case "mqtt": {const value = Object.assign({}, args); if (value.password === "••••") delete value.password; return app.setSetting("mqtt", value, "MQTT settings changed")}
     case "prefs": {const result = app.setSetting("prefs", args, args.updateChannel ? `Updates: ${args.updateChannel} channel` : "Settings changed"); if (args.updateChannel) app.checkUpdate().catch(() => {}); return result}

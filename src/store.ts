@@ -1,16 +1,16 @@
 // SQLite store: the source of truth for the UI, so the page keeps working when the adapter doesn't
 import {DatabaseSync} from "node:sqlite";
-import type {Control, Kind} from "./radio/radio.js";
+import type {Control, Kind, ReportLevel, Reporting} from "./radio/radio.js";
 
 export const HISTORY_DAYS = 30, EVENTS_KEPT = 50000; // the log never outgrows this, however chatty the network
 export type Format = "json" | "values" | "both";
-export interface DeviceRow {ieee: string; name: string; topic: string; format: Format; renames: Record<string, string>; status: "waiting" | "accepted"; kind: Kind; model?: string; vendor?: string; description?: string; note?: string; supported: boolean; controls: Control[]; hidden_controls: string[]; offline_after_override?: number; added_at: number; last_seen?: number; state: Record<string, unknown>; gaps: number[]; firmware?: string; update_available?: boolean}
+export interface DeviceRow {ieee: string; name: string; topic: string; format: Format; renames: Record<string, string>; status: "waiting" | "accepted"; kind: Kind; model?: string; vendor?: string; description?: string; note?: string; supported: boolean; controls: Control[]; hidden_controls: string[]; offline_after_override?: number; added_at: number; last_seen?: number; state: Record<string, unknown>; gaps: number[]; firmware?: string; update_available?: boolean; reporting?: {level: ReportLevel; values: Reporting[]; ts: number}}
 export interface EventRow {id: number; ts: number; ieee?: string; level: "info" | "warn" | "bad"; text: string; tech?: string}
 export interface GroupRow {id: number; name: string; topic: string; members: string[]}
 export interface SceneRow {id: number; group_id: number; name: string; states: Record<string, Record<string, unknown>>}
 export interface BindingRow {from_ieee: string; to: string}
 
-const jsonCols = ["renames", "controls", "hidden_controls", "state", "gaps"];
+const jsonCols = ["renames", "controls", "hidden_controls", "state", "gaps", "reporting"];
 const decode = (row: any) => {if (!row) return row; for (const column of jsonCols) if (column in row) row[column] = JSON.parse(row[column] ?? "null"); if ("supported" in row) row.supported = !!row.supported; if ("update_available" in row) row.update_available = !!row.update_available; return row};
 
 export class Store {
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS scenes(id INTEGER PRIMARY KEY, group_id INT, name TEX
 CREATE TABLE IF NOT EXISTS bindings(from_ieee TEXT, "to" TEXT, PRIMARY KEY(from_ieee, "to"));
 CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forward TEXT, backward TEXT, undone INT DEFAULT 0);`);
     // columns added after the first release
-    for (const [table, column] of [["devices", "note TEXT"], ["links", "seen INT"]]) try {this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)} catch {}
+    for (const [table, column] of [["devices", "note TEXT"], ["devices", "reporting TEXT"], ["links", "seen INT"]]) try {this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`)} catch {}
   }
   // settings
   get<T>(key: string, fallback: T): T {const row: any = this.db.prepare("SELECT value FROM settings WHERE key=?").get(key); return row ? JSON.parse(row.value) : fallback}
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS undo(id INTEGER PRIMARY KEY, ts INT, label TEXT, forw
   devices(): DeviceRow[] {return this.db.prepare("SELECT * FROM devices ORDER BY name").all().map(decode)}
   device(ieee: string): DeviceRow | undefined {return decode(this.db.prepare("SELECT * FROM devices WHERE ieee=?").get(ieee))}
   saveDevice(device: DeviceRow) {
-    const columns = Object.keys(device), values = columns.map(column => {const value = (device as any)[column]; return jsonCols.includes(column) ? JSON.stringify(value) : typeof value === "boolean" ? (value ? 1 : 0) : value ?? null});
+    const columns = Object.keys(device), values = columns.map(column => {const value = (device as any)[column]; return jsonCols.includes(column) ? JSON.stringify(value ?? null) : typeof value === "boolean" ? (value ? 1 : 0) : value ?? null});
     const statement = this.db.prepare(`INSERT INTO devices(${columns.join(",")}) VALUES(${columns.map(() => "?").join(",")}) ON CONFLICT(ieee) DO UPDATE SET ${columns.map(column => `${column}=excluded.${column}`).join(",")}`);
     statement.run.apply(statement, values as any);
   }

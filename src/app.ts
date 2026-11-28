@@ -3,7 +3,7 @@ import {EventEmitter} from "node:events";
 import {copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync} from "node:fs";
 import {spawn} from "node:child_process";
 import {Store, type DeviceRow, type Format, type GroupRow} from "./store.js";
-import {Radio, type Control, type RadioDevice, type RadioStatus} from "./radio/radio.js";
+import {Radio, type Control, type RadioDevice, type RadioStatus, type ReportLevel} from "./radio/radio.js";
 import {SimRadio} from "./radio/sim.js";
 import {HerdsmanRadio, adapterLog, type StickConfig} from "./radio/herdsman.js";
 import {JoinWatch, diagnose} from "./joinwatch.js";
@@ -13,10 +13,11 @@ import {translate} from "./errors.js";
 
 const newerThan = (candidate: string, current: string) => {const left = candidate.split(".").map(Number), right = current.split(".").map(Number); for (let index = 0; index < 3; index++) if ((left[index] ?? 0) !== (right[index] ?? 0)) return (left[index] ?? 0) > (right[index] ?? 0); return false};
 export const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+const REPORT_WORDS: Record<ReportLevel, string> = {normal: "normally", more: "more often", most: "as often as possible"};
 const LINK_SCAN_MS = 6 * 3600e3, WATCHED_SCAN_MS = 5 * 60e3, BACKUPS_KEPT = 14, REJOIN_SECONDS = 180;
 export interface Prefs {batteryLeadDays: number; batteryPercent: number; stats: boolean; updateChannel: "stable" | "dev"}
 const DEFAULT_PREFS: Prefs = {batteryLeadDays: 21, batteryPercent: 10, stats: false, updateChannel: "stable"};
-export type Op = {op: "device"; ieee: string; fields: Partial<DeviceRow>} | {op: "setting"; key: string; value: unknown} | {op: "group"; group: GroupRow | null; id: number} | {op: "scene"; scene: any; id: number} | {op: "bind"; from: string; to: string; remove: boolean} | {op: "rejoin"; row: DeviceRow} | {op: "remove"; ieee: string} | {op: "values"; ieee: string; values: Record<string, unknown>};
+export type Op = {op: "device"; ieee: string; fields: Partial<DeviceRow>} | {op: "setting"; key: string; value: unknown} | {op: "group"; group: GroupRow | null; id: number} | {op: "scene"; scene: any; id: number} | {op: "bind"; from: string; to: string; remove: boolean} | {op: "rejoin"; row: DeviceRow} | {op: "remove"; ieee: string} | {op: "values"; ieee: string; values: Record<string, unknown>} | {op: "reporting"; ieee: string; level: ReportLevel};
 
 export const slug = (name: string) => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "device";
 const pick = <T extends object>(source: T, keys: (keyof T)[]) => {const out: Partial<T> = {}; for (const key of keys) out[key] = structuredClone(source[key]); return out};
@@ -152,7 +153,7 @@ export class App extends EventEmitter {
     const radioDevice = this.radio?.list().find(candidate => candidate.ieee === ieee);
     if (radioDevice) this.upsert(radioDevice, true);
     if (status === "failed") {this.joinWatch.failed(ieee); const verdict = this.joinWatch.reports.get(ieee)?.verdict; this.log("warn", verdict ? `${this.store.device(ieee)?.name ?? ieee}: ${verdict.headline}. ${verdict.why}` : translate("Interview failed").text, ieee)}
-    if (status === "successful") {this.joinWatch.step(ieee, "ready"); if (radioDevice && !radioDevice.supported) this.joinWatch.set(ieee, {unknownModel: [radioDevice.vendor, radioDevice.model].filter(Boolean).join(" ") || "an unknown model"})}
+    if (status === "successful") {const level = this.store.device(ieee)?.reporting?.level; if (level && level !== "normal") this.applyReporting(ieee, level).catch(() => {}); /* joining again sets the device's own reporting: put the chosen one back */ this.joinWatch.step(ieee, "ready"); if (radioDevice && !radioDevice.supported) this.joinWatch.set(ieee, {unknownModel: [radioDevice.vendor, radioDevice.model].filter(Boolean).join(" ") || "an unknown model"})}
     this.changed();
   }
   // a device that didn't finish joining gets another go each time it's heard (a sleepy one is awake right then), at most once a minute, 10 times
@@ -414,6 +415,17 @@ export class App extends EventEmitter {
     if (/already in progress/i.test(text)) return new Error(`${device.name} is already updating.`);
     return new Error(`Couldn't check ${device.name}: ${translate(text).text}`);
   }
+  // how often a device reports its measured values; what the device agreed to is read back and kept
+  async applyReporting(ieee: string, level: ReportLevel) {
+    const device = this.need(ieee), values = await this.requireRadio().setReporting(ieee, level);
+    if (!values.length) throw new Error(`${device.name} didn't answer. ${device.kind === "battery" ? "Press its button to wake it, then try again." : "Check it has power, then try again."}`);
+    if (!values.some(value => value.ok)) {this.applyDevice(ieee, {reporting: {level: device.reporting?.level ?? "normal", values, ts: Date.now()}}); throw new Error(`${device.name} keeps its own schedule and doesn't take changes to how often it reports.`)}
+    this.applyDevice(ieee, {reporting: {level, values, ts: Date.now()}}); return values;
+  }
+  async setReporting(ieee: string, level: ReportLevel) {
+    const device = this.need(ieee), before = device.reporting?.level ?? "normal", values = await this.applyReporting(ieee, level);
+    return Object.assign(this.pushUndo(`${device.name}: reports ${REPORT_WORDS[level]}`, {op: "reporting", ieee, level}, {op: "reporting", ieee, level: before}), {values});
+  }
   async checkFirmware(ieee: string) {
     const device = this.need(ieee);
     try {const available = await this.requireRadio().checkFirmware(ieee); this.applyDevice(ieee, {update_available: !!available}); return available}
@@ -459,6 +471,7 @@ export class App extends EventEmitter {
     if (op.op === "scene") {if (op.scene) this.store.saveScene(op.scene); else this.store.deleteScene(op.id); this.changed()}
     if (op.op === "bind") {await this.requireRadio().bind(op.from, op.to.startsWith("group:") ? Number(op.to.slice(6)) : op.to, op.remove); this.store.saveBinding(op.from, op.to, op.remove); this.changed()}
     if (op.op === "values") await this.setValues(op.ieee, op.values);
+    if (op.op === "reporting") await this.applyReporting(op.ieee, op.level);
     if (op.op === "remove") {if (this.store.device(op.ieee)) await this.removeDevice(op.ieee)}
     if (op.op === "rejoin") {this.rejoinRows.set(op.row.ieee, op.row); this.emit("rejoin", {ieee: op.row.ieee, name: op.row.name}); if (this.radio && this.radioStatus.up) await this.join(REJOIN_SECONDS)}
   }
@@ -529,7 +542,7 @@ export class App extends EventEmitter {
       join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia, moving: this.moving && this.moving.until > Date.now() ? this.moving : undefined},
       // how each recent join went, with the verdict in plain words (names filled in)
       joinReports: Array.from(this.joinWatch.reports.values()).map(report => Object.assign({}, report, {verdict: diagnose(report, ieee => ieee ? this.store.device(ieee)?.name ?? ieee : "the adapter")})),
-      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, ota: this.radio?.canUpdateFirmware(device.ieee) ?? false, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
+      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, ota: this.radio?.canUpdateFirmware(device.ieee) ?? false, reportable: this.radio?.canSetReporting(device.ieee) ?? false, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
       stickIeee: this.stickIeee(), links: latest, scan: Object.assign({}, this.scan, {finishedAt: this.scan.finishedAt ?? this.store.get<number | undefined>("lastScan", undefined)}), groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),
       undo: this.store.undoList(300), changes: this.meshChanges(), backups: this.backups().map(entry => ({name: entry.name, ts: entry.ts, reason: entry.reason})),
     };

@@ -1,5 +1,5 @@
 // Fake adapter and devices, so the app runs (and can be shown) without any Zigbee hardware
-import {Radio, type Control, type Link, type RadioDevice, type ScanProgress} from "./radio.js";
+import {Radio, type ReportLevel, type Reporting, type Control, type Link, type RadioDevice, type ScanProgress} from "./radio.js";
 
 const onOff: Control = {property: "state", label: "On/off", type: "binary", writable: true, readable: true, on: "ON", off: "OFF"};
 const brightness: Control = {property: "brightness", label: "Brightness", type: "numeric", writable: true, readable: true, min: 0, max: 254};
@@ -117,6 +117,14 @@ export class SimRadio extends Radio {
   async groupSet(groupId: number, values: Record<string, unknown>) {}
   async sceneStore() {}
   async sceneRecall() {}
+  // plugs report power, the climate sensor temperature; the plug ending 104 keeps its own schedule
+  canSetReporting(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee); return !!device && ("power" in device.state || "temperature" in device.state)}
+  async setReporting(ieee: string, level: ReportLevel): Promise<Reporting[]> {
+    const device = this.devices.find(candidate => candidate.ieee === ieee)!; await new Promise(resolve => setTimeout(resolve, device.kind === "battery" ? 5000 : 1200));
+    const [min, max] = level === "most" ? [1, 60] : level === "more" ? [5, 300] : [10, 3600], power = "power" in device.state;
+    if (ieee.endsWith("104")) return [{name: "Power", ok: false}];
+    return [{name: power ? "Power" : "Temperature", ok: true, min, max, change: level === "most" ? "any" : power ? undefined : level === "more" ? "0.1 °C" : "0.5 °C"}];
+  }
   async checkFirmware(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee); if (device?.kind === "battery") await new Promise(resolve => setTimeout(resolve, 7000)); /* asleep until its next check-in */ return ieee.endsWith("103") ? true : ieee.endsWith("101") ? null : false}
   async updateFirmware(ieee: string, progress: (percent: number, secondsLeft?: number) => void) {for (let percent = 0; percent <= 100; percent += 10) {progress(percent, (100 - percent) * 3); await new Promise(resolve => setTimeout(resolve, 400))} const device = this.devices.find(candidate => candidate.ieee === ieee); if (device) device.firmware = "1.0.4"}
   async scanChannels() {return {15: 40, 20: 12, 25: 25}}
