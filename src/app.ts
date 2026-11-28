@@ -14,6 +14,12 @@ import {translate} from "./errors.js";
 const newerThan = (candidate: string, current: string) => {const left = candidate.split(".").map(Number), right = current.split(".").map(Number); for (let index = 0; index < 3; index++) if ((left[index] ?? 0) !== (right[index] ?? 0)) return (left[index] ?? 0) > (right[index] ?? 0); return false};
 export const VERSION: string = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
 const REPORT_WORDS: Record<ReportLevel, string> = {normal: "normally", more: "more often", most: "as often as possible"};
+// pending changes: how long to wait for the device to confirm (sleepy devices answer when they next check in), how long a late match still counts, how long an ending stays on screen
+const WAIT_MS = 15e3, WAIT_SLEEPY_MS = 90e3, LATE_MS = 10 * 60e3, LATE_SLEEPY_MS = 2 * 3600e3, SHOWN_MS = 6e3;
+export interface Pending {wanted: unknown; was: unknown; at: number; step?: number; phase: "sending" | "waiting" | "set" | "other" | "none" | "failed"; latest?: unknown; ended?: number}
+// close enough is the same: within half a step (a valve rounds 18.4 to 18.5), and on / ON / true alike
+const sameValue = (one: unknown, other: unknown, step = 0) => typeof one === "number" && typeof other === "number" ? Math.abs(one - other) <= Math.max(step / 2, 1e-6) : normal(one) === normal(other);
+const normal = (value: unknown) => value === true ? "ON" : value === false ? "OFF" : String(value).toUpperCase();
 const LINK_SCAN_MS = 6 * 3600e3, WATCHED_SCAN_MS = 5 * 60e3, BACKUPS_KEPT = 14, REJOIN_SECONDS = 180;
 export interface Prefs {batteryLeadDays: number; batteryPercent: number; stats: boolean; updateChannel: "stable" | "dev"}
 const DEFAULT_PREFS: Prefs = {batteryLeadDays: 21, batteryPercent: 10, stats: false, updateChannel: "stable"};
@@ -131,7 +137,8 @@ export class App extends EventEmitter {
     const device = this.store.device(ieee);
     if (!device) return;
     if (lqi !== undefined) values = Object.assign({}, values, {linkquality: lqi});
-    if (!assumed) addGap(device, Date.now()); // a value assumed from a command we sent isn't the device being heard
+    if (!assumed) {addGap(device, Date.now()); this.checkPending(ieee, values)} // a value assumed from a command we sent isn't the device being heard
+    else {const list = this.pending.get(ieee); if (list) values = pick(values, Object.keys(values).filter(key => !list[key])); if (!Object.keys(values).length) return} // MQTT carries what the device confirmed, never what we hope
     Object.assign(device.state, values);
     this.store.saveDevice(device);
     this.store.record(ieee, values);
@@ -256,9 +263,44 @@ export class App extends EventEmitter {
   // ---------- commands from the web page ----------
   need(ieee: string) {const device = this.store.device(ieee); if (!device) throw new Error("That device isn't known."); return device}
   requireRadio() {if (!this.radio || !this.radioStatus.up) throw new Error("The Zigbee adapter isn't connected, so this can't reach the device right now."); return this.radio}
+  // A change is only "done" when the device itself says so. Until then the page shows what you asked for, marked pending:
+  // sending (until the device acknowledges) > waiting (its value is asked for straight away; only a matching value ends it early,
+  // because a message the device sent before it took the change can still arrive) > after WAIT_MS: set / set something else / not confirmed.
+  // A matching value up to LATE_MS later still turns "not confirmed" into set. Nothing is ever shown as done on the strength of sending it.
   async setValues(ieee: string, values: Record<string, unknown>) {
-    const device = this.need(ieee);
-    try {await this.requireRadio().set(ieee, values)} catch (error) {const message = translate(String((error as Error).message), device.name); this.log("warn", message.text, ieee, String(error)); throw new Error(message.text)}
+    const device = this.need(ieee), now = Date.now(), sleepy = device.kind === "battery";
+    for (const [key, wanted] of Object.entries(values)) this.track(ieee, key, {wanted, was: device.state[key], at: now, phase: "sending", step: device.controls.find(control => control.property === key)?.step});
+    this.changed();
+    try {await this.requireRadio().set(ieee, values)}
+    catch (error) {const message = translate(String((error as Error).message), device.name); for (const key of Object.keys(values)) this.track(ieee, key, {wanted: values[key], was: device.state[key], at: now, phase: "failed"}, SHOWN_MS); this.changed(); this.log("warn", message.text, ieee, String(error)); throw new Error(message.text)}
+    for (const key of Object.keys(values)) {const entry = this.pending.get(ieee)?.[key]; if (entry?.at === now && entry.phase === "sending") this.track(ieee, key, Object.assign(entry, {phase: "waiting"}), sleepy ? WAIT_SLEEPY_MS : WAIT_MS, () => this.settle(ieee, key, now))}
+    this.changed();
+    this.radio?.readBack(ieee, Object.keys(values)).catch(() => {});
+  }
+  pending = new Map<string, Record<string, Pending>>(); timers = new Map<string, NodeJS.Timeout>();
+  // one entry per device value; replacing it cancels the old timer. after: run then (default: forget the entry)
+  track(ieee: string, key: string, entry: Pending, ms?: number, after?: () => void) {
+    const list = this.pending.get(ieee) ?? {}, id = ieee + "|" + key; list[key] = entry; this.pending.set(ieee, list); clearTimeout(this.timers.get(id));
+    if (ms) this.timers.set(id, setTimeout(after ?? (() => {const now = this.pending.get(ieee); if (now?.[key] === entry) {delete now[key]; this.changed()}}), ms));
+  }
+  // out of time: ask the device once more before calling it, then only failures go in Activity
+  async settle(ieee: string, key: string, at: number) {
+    const entry = this.pending.get(ieee)?.[key]; if (!entry || entry.at !== at || entry.phase !== "waiting") return;
+    await this.radio?.readBack(ieee, [key]).catch(() => {}); if (entry.phase !== "waiting") return;
+    const device = this.store.device(ieee), name = device?.name ?? ieee, label = device?.controls.find(control => control.property === key)?.label ?? key;
+    entry.phase = entry.latest !== undefined && !sameValue(entry.latest, entry.wanted, entry.step) ? "other" : "none"; entry.ended = Date.now();
+    this.log("warn", entry.phase === "other" ? `${name} set ${label} to ${entry.latest} instead of ${entry.wanted}.` : `${name} didn't confirm ${label} ${entry.wanted}.`, ieee);
+    this.track(ieee, key, entry, device?.kind === "battery" ? LATE_SLEEPY_MS : LATE_MS); this.changed();
+  }
+  // a report from the device (never our own assumption) ends or updates what's pending
+  checkPending(ieee: string, values: Record<string, unknown>) {
+    const list = this.pending.get(ieee); if (!list) return;
+    for (const [key, entry] of Object.entries(list)) {
+      if (!(key in values) || entry.phase === "set" || entry.phase === "failed") continue;
+      if (sameValue(values[key], entry.wanted, entry.step)) {entry.phase = "set"; entry.ended = Date.now(); this.track(ieee, key, entry, SHOWN_MS); this.changed()}
+      else if (entry.phase === "waiting") entry.latest = values[key];
+      else {delete list[key]; this.changed()} // after it ended, the device moving on to another value closes it
+    }
   }
   // A changed device setting is undoable: we put the old value back on the device
   async changeSetting(ieee: string, property: string, value: unknown) {
@@ -542,7 +584,7 @@ export class App extends EventEmitter {
       join: {endsAt: this.joinEndsAt, found: this.joinFound, via: this.joinVia, moving: this.moving && this.moving.until > Date.now() ? this.moving : undefined},
       // how each recent join went, with the verdict in plain words (names filled in)
       joinReports: Array.from(this.joinWatch.reports.values()).map(report => Object.assign({}, report, {verdict: diagnose(report, ieee => ieee ? this.store.device(ieee)?.name ?? ieee : "the adapter")})),
-      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, ota: this.radio?.canUpdateFirmware(device.ieee) ?? false, reportable: this.radio?.canSetReporting(device.ieee) ?? false, firmwareProgress: this.firmwareProgress.get(device.ieee)})),
+      devices: devices.map(device => Object.assign({}, device, {gaps: undefined, health: this.healthOf(device, parents, all), parent: parents.get(device.ieee), lqi: latest.links.find(link => link.child === device.ieee)?.lqi, rssi: this.signals.get(device.ieee)?.rssi, ota: this.radio?.canUpdateFirmware(device.ieee) ?? false, reportable: this.radio?.canSetReporting(device.ieee) ?? false, pending: this.pending.get(device.ieee), firmwareProgress: this.firmwareProgress.get(device.ieee)})),
       stickIeee: this.stickIeee(), links: latest, scan: Object.assign({}, this.scan, {finishedAt: this.scan.finishedAt ?? this.store.get<number | undefined>("lastScan", undefined)}), groups: this.store.groups(), scenes: this.store.scenes(), bindings: this.store.bindings(),
       undo: this.store.undoList(300), changes: this.meshChanges(), backups: this.backups().map(entry => ({name: entry.name, ts: entry.ts, reason: entry.reason})),
     };

@@ -113,6 +113,13 @@ test("end to end with the simulator: MQTT out and in, holding area, undo, heartb
     await until(() => app.store.device(plug.ieee)!.state.state === "OFF");
     watcher.publish("s2m/hall_plug/state/set", "ON");
     await until(() => app.store.device(plug.ieee)!.state.state === "ON");
+    // a change is pending until the device itself reports it; a plug that's off at the wall never confirms
+    const pendingSet = app.setValues(plug.ieee, {state: "OFF"});
+    assert.equal(app.pending.get(plug.ieee)!.state.phase, "sending"); await pendingSet;
+    await until(() => app.pending.get(plug.ieee)?.state?.phase === "set");
+    await (app.radio as any).set(plug.ieee, {_power: false});
+    await assert.rejects(app.setValues(plug.ieee, {state: "ON"})); assert.equal(app.pending.get(plug.ieee)!.state.phase, "failed");
+    (app.radio as any).devices.find((device: any) => device.ieee === plug.ieee).off = false;
     // a new device waits and sends nothing until accepted
     await app.join(60);
     await until(() => app.store.devices().some(device => device.status === "waiting"), 15e3);

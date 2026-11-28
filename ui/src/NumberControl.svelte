@@ -5,7 +5,9 @@
   let draft = $state(null), timer;
   let step = $derived(control.step ?? 1), shownValue = $derived(draft ?? value ?? control.min ?? 0);
   const clamp = number => Math.min(control.max ?? Infinity, Math.max(control.min ?? -Infinity, Math.round(number / step) * step));
-  function send(number, later) {draft = Number(clamp(number).toFixed(4)); clearTimeout(timer); timer = setTimeout(() => {onset(draft); draft = null}, later ? 700 : 0)}
+  // the draft stays on screen until the page shows the sent value (as pending), so it never flicks back to the old one
+  function send(number, later) {draft = Number(clamp(number).toFixed(4)); clearTimeout(timer); timer = setTimeout(() => {const sent = draft; onset(sent); timer = setTimeout(() => {if (draft === sent) draft = null}, 3000)}, later ? 700 : 0)}
+  $effect(() => {if (draft !== null && value === draft) draft = null});
 </script>
 <span class="numctl">
   <button class="pm" aria-label="Lower" disabled={shownValue <= control.min} onclick={() => send(shownValue - step, true)}>−</button>

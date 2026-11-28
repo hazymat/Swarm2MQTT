@@ -90,9 +90,12 @@ export class SimRadio extends Radio {
     if (device.off || this.cutOff(device)) throw new Error("No response");
     // in the simulator, switching a router plug "off" at the wall is done with the hidden key _power
     if ("_power" in values) {device.off = !values._power; return}
-    Object.assign(device.state, values);
-    this.emit("state", ieee, Object.assign({}, device.state), device.lqi);
+    // like real devices: a plug answers within a moment; a battery device takes a few seconds, and first sends one message it had queued with the old value
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms)), old = Object.assign({}, device.state);
+    if (device.kind === "battery") {await wait(1500); setTimeout(() => this.emit("state", ieee, old, device.lqi), 300); setTimeout(() => {Object.assign(device.state, values); this.emit("state", ieee, Object.assign({}, device.state), device.lqi)}, 4000); return}
+    setTimeout(() => {Object.assign(device.state, values); this.emit("state", ieee, Object.assign({}, device.state), device.lqi)}, 400);
   }
+  async readBack(ieee: string, keys: string[]) {const device = this.devices.find(candidate => candidate.ieee === ieee); if (device && !device.off && device.kind !== "battery") this.emit("state", ieee, Object.fromEntries(keys.filter(key => key in device.state).map(key => [key, device.state[key]])), device.lqi)}
   async rejoin(ieee: string) {const device = this.devices.find(candidate => candidate.ieee === ieee), via = this.joinVia; if (device && via) setTimeout(() => {device.parent = via; this.emit("joinInfo", ieee, {parent: via})}, 3000)}
   async remove(ieee: string) {const answered = !this.halfJoined.has(ieee); this.devices = this.devices.filter(device => device.ieee !== ieee); this.emit("left", ieee); return answered}
   halfJoined = new Map<string, SimDevice>();

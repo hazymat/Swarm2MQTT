@@ -29,6 +29,7 @@ What Swarm2MQTT does that Zigbee2MQTT doesn't, or does for you where Zigbee2MQTT
 - **Move a battery device to another plug**, guided: joining opens on that plug only and the device is asked to come back through it.
 
 ## Day to day
+- **A change is only shown as done when the device confirms it**, with what it's waiting for meanwhile, and the screen never flicks back to the old value. MQTT carries only confirmed values.
 - **How often a device reports, in one choice** (Normal, More often, As often as possible), read back from the device so you see what it actually agreed to.
 - **Plain names for Zigbee jargon**, like Target temperature instead of occupied heating setpoint, with a line on when to change a setting.
 - **Every number shows its value** with − and + for exact steps, not a bare slider.

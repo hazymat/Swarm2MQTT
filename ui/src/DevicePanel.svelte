@@ -46,6 +46,11 @@
   // what the device agreed to, read back from it: "on any change (at most every 1 s), and at least every 1 min"
   const reportText = value => `on ${value.change === "any" ? "any change" : value.change ? `a ${value.change} change` : "a change"}${value.min ? ` (at most every ${duration(value.min * 1000)})` : ""}, and at least every ${duration(value.max * 1000)}`;
   function setReporting(level) {act("setReporting", {ieee: device.ieee, level}).then(result => {const kept = result.values.filter(value => !value.ok).map(value => value.name.toLowerCase()); if (kept.length) toast(`${device.name} kept its own schedule for ${kept.join(" and ")}.`, null, "bad")}).catch(() => {})}
+  // a change shows at once, marked until the device itself confirms it (the service keeps this, so every open page agrees)
+  let pending = $derived(device.pending ?? {});
+  const OPEN = ["sending", "waiting", "set"];
+  const valueOf = control => {const entry = pending[control.property]; return entry && OPEN.includes(entry.phase) ? entry.wanted : device.state[control.property]};
+  const isPending = control => ["sending", "waiting"].includes(pending[control.property]?.phase);
   function setValue(control, value) {act(control.setting ? "setting" : "set", control.setting ? {ieee: device.ieee, property: control.property, value} : {ieee: device.ieee, values: {[control.property]: value}}).catch(() => {})}
   let renames = $state({});
   $effect(() => {renames = Object.assign({}, device.renames)});
@@ -57,6 +62,16 @@
   let fw = $derived(device.firmwareProgress);
   async function remove() {const ieee = device.ieee, name = device.name; view.open = null; toast(`Removing ${name}`, null, "info", () => act("remove", {ieee}).catch(() => {}))}
 </script>
+
+{#snippet pendingLine(control)}
+  {@const entry = pending[control.property]}
+  {#if entry}<span class="pend {entry.phase}" aria-live="polite">
+    {#if entry.phase === "sending"}<i class="pdot"></i>Sending…
+    {:else if entry.phase === "waiting"}<i class="pdot"></i>{device.kind === "battery" ? "Waiting for it to wake and confirm" : "Waiting for it to confirm"} (was {valueText(control, entry.was)})
+    {:else if entry.phase === "set"}✓ Set
+    {:else}{entry.phase === "other" ? `It set ${valueText(control, entry.latest)} instead` : entry.phase === "failed" ? "Didn't reach it" : `Not confirmed, it still says ${valueText(control, device.state[control.property])}`} · <button class="again" onclick={() => setValue(control, entry.wanted)}>Try again</button>{/if}
+  </span>{/if}
+{/snippet}
 
 <div class="panel card">
   <div class="top">
@@ -100,11 +115,11 @@
       <h3>Now <span class="faint">{ago(device.last_seen, view.now)}</span></h3>
       {#each readings as control (control.property)}
         <div class="kv">
-          <span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}{#if control.guessed}<span class="guess" title="Our best guess from what the device reports">guessed</span>{/if}</span>
+          <span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}{@render pendingLine(control)}{#if control.guessed}<span class="guess" title="Our best guess from what the device reports">guessed</span>{/if}</span>
           <span class="v">
-            {#if control.writable && control.type === "binary"}<button class="switch" class:on={device.state[control.property] === control.on} onclick={() => setValue(control, device.state[control.property] === control.on ? control.off : control.on)} aria-label={control.label}></button>
-            {:else if control.writable && control.type === "numeric"}<NumberControl {control} value={device.state[control.property]} onset={number => setValue(control, number)}/>
-            {:else if control.writable && control.type === "enum"}<span class="seg">{#each control.values as value}<button class:on={device.state[control.property] === value} onclick={() => setValue(control, value)}>{valueText(null, value)}</button>{/each}</span>
+            {#if control.writable && control.type === "binary"}<button class="switch" class:on={valueOf(control) === control.on} onclick={() => setValue(control, valueOf(control) === control.on ? control.off : control.on)} aria-label={control.label}></button>
+            {:else if control.writable && control.type === "numeric"}<NumberControl {control} value={valueOf(control)} onset={number => setValue(control, number)}/>
+            {:else if control.writable && control.type === "enum"}<span class="seg">{#each control.values as value}<button class:on={valueOf(control) === value} onclick={() => setValue(control, value)}>{valueText(null, value)}</button>{/each}</span>
             {:else}<span class="reading">{valueText(control, device.state[control.property])}</span>{/if}
             <button class="x" title="Remove this control" onclick={() => act("hideControl", {ieee: device.ieee, property: control.property, hidden: true})}>✕</button>
           </span>
@@ -119,10 +134,10 @@
       <div class="box">
         <h3>On the device</h3>
         {#each moreSettings ? settings : common as control (control.property)}
-          <div class="kv"><span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}</span>
-            {#if control.type === "enum"}<span class="seg">{#each control.values as value}<button class:on={String(device.state[control.property]) === String(value)} onclick={() => setValue(control, value)}>{valueText(null, value)}</button>{/each}</span>
-            {:else if control.type === "binary"}<button class="switch" class:on={device.state[control.property] === control.on} onclick={() => setValue(control, device.state[control.property] === control.on ? control.off : control.on)} aria-label={control.label}></button>
-            {:else if control.type === "numeric"}<NumberControl {control} value={device.state[control.property]} onset={number => setValue(control, number)}/>
+          <div class="kv"><span class="k">{control.label}{#if control.help}<span class="help">{control.help}</span>{/if}{@render pendingLine(control)}</span>
+            {#if control.type === "enum"}<span class="seg">{#each control.values as value}<button class:on={String(valueOf(control)) === String(value)} onclick={() => setValue(control, value)}>{valueText(null, value)}</button>{/each}</span>
+            {:else if control.type === "binary"}<button class="switch" class:on={valueOf(control) === control.on} onclick={() => setValue(control, valueOf(control) === control.on ? control.off : control.on)} aria-label={control.label}></button>
+            {:else if control.type === "numeric"}<NumberControl {control} value={valueOf(control)} onset={number => setValue(control, number)}/>
             {:else}<span>{valueText(control, device.state[control.property])}</span>{/if}
           </div>
         {/each}
@@ -252,6 +267,10 @@
   .keys i.gap{background:var(--glass);border:1px solid var(--glass-border)}
   .small{font-size:13.5px;color:var(--muted);margin-bottom:6px}
   .small b{color:var(--text)}
+  .pend{display:block;font-size:12.5px;font-weight:400;color:var(--muted);margin-top:1px}.pend.set{color:var(--mint)}.pend.other,.pend.none,.pend.failed{color:var(--peach)}
+  .pdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:1px;animation:pdot 1.2s ease-in-out infinite}
+  @keyframes pdot{50%{opacity:.25}}
+  .again{color:var(--accent);font-size:12.5px;padding:0;text-decoration:underline}
   .reports{margin:8px 0 0;padding-left:18px;font-size:13.5px;color:var(--muted);display:flex;flex-direction:column;gap:2px}.reports b{color:var(--text);font-weight:500}
   .box > .seg + .small{margin-top:8px}
   .num{width:80px}

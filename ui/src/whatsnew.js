@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 39, text: "When you change something on a device, your value shows at once with a pulsing dot and what it's waiting for: Sending…, then Waiting for it to confirm (was 18). It ends with ✓ Set, or says plainly what happened, like It set 19 instead or Not confirmed, with Try again. No more jumping back to the old value while the device catches up."},
   {id: 38, text: "A device that measures things, like a plug's power or a temperature, has How often it reports: Normal, More often or As often as possible. The device is asked afterwards what it agreed to, and the page shows it, or says when a device keeps its own schedule. Battery devices say what it costs."},
   {id: 37, text: "Every number you can change on a device shows its value and unit, with − and + for exact steps. Radiator valves use plain names: Target temperature, and Temperature correction with a line on when to change it."},
   {id: 35, text: "A device's MQTT section shows what it sends as a tree: the message with nested parts that fold open, and the topics nested by level, plus its availability topic and where to send changes, with an example. Values are coloured by type, a value that just changed lights up, each row can copy its topic or value, and Find a value narrows it down.", go: "home"},
