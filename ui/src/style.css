@@ -11,6 +11,8 @@ body{color:var(--text);background:transparent;font:15px/1.45 system-ui,-apple-sy
 input,textarea,select,button{font:inherit;color:inherit}
 input,textarea,.selectable,code{-webkit-user-select:text;user-select:text}
 button{cursor:pointer;background:none;border:0}
+/* quick repeated taps are taps, never a double-tap zoom (pinch zoom still works) */
+button,a,input,select,label,[role=button]{touch-action:manipulation}
 a{color:inherit;text-decoration:none}
 .icon{width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .icon.small{width:16px;height:16px}
