@@ -1,16 +1,20 @@
 <script>
-  import {live, dismiss, cancelPending} from "./api.svelte.js";
+  import {live, dismiss, cancelPending, dismissAll} from "./api.svelte.js";
   import {view} from "./ui.svelte.js";
-  const CIRCLE = 40.8;
+  const CIRCLE = 40.8, SHOWN = 2;
+  // newest two show; older ones fold into one "n more" pill you can open or clear
+  let open = $state(false), hidden = $derived(open ? 0 : Math.max(0, live.toasts.length - SHOWN)), shown = $derived(live.toasts.slice(hidden));
+  $effect(() => {if (live.toasts.length <= SHOWN) open = false});
 </script>
 <div class="stack">
-  {#each live.toasts as item (item.id)}
+  {#if live.toasts.length > SHOWN}<div class="toast more"><button class="plain" onclick={() => open = !open}>{open ? "Show fewer" : `${hidden} more`}</button><button onclick={dismissAll}>Clear all</button></div>{/if}
+  {#each shown as item (item.id)}
     <div class="toast" class:bad={item.level === "bad"}>
       <svg width="16" height="16" viewBox="0 0 16 16" style="transform:rotate(-90deg)"><circle cx="8" cy="8" r="6.5" fill="none" stroke="var(--glass-hover)" stroke-width="2.6"/><circle class="ring" cx="8" cy="8" r="6.5" fill="none" stroke={item.level === "bad" ? "var(--red)" : "var(--accent)"} stroke-width="2.6" stroke-dasharray={CIRCLE} stroke-linecap="round" style="animation-duration:{item.ms}ms"/></svg>
-      <span>{item.label}</span>
+      <span>{item.label}{#if item.times > 1}<b class="times">×{item.times}</b>{/if}</span>
       {#if item.then}<button onclick={() => cancelPending(item.id)}>Undo</button>
       {:else if item.action}<button onclick={() => {dismiss(item.id); item.action()}}>Undo<kbd>Ctrl Z</kbd></button>
-      {:else if item.level === "bad"}<button onclick={() => dismiss(item.id)} aria-label="Close">✕</button>{/if}
+      {:else if item.level === "bad" || item.level === "wait"}<button onclick={() => dismiss(item.id)} aria-label="Close">✕</button>{/if}
     </div>
   {/each}
 </div>
@@ -21,6 +25,8 @@
   .toast.bad{border-color:color-mix(in srgb,var(--red) 60%,transparent);white-space:normal}
   .toast button{padding:4px 13px;font-size:14px;font-weight:600;color:var(--accent);border:1px solid var(--glass-border);border-radius:18px;flex:none}
   .ring{animation:empty linear forwards}
+  .more{padding:4px 6px 4px 8px;gap:6px;font-size:13.5px}.more .plain{border:0;color:var(--muted);font-weight:500}
+  .times{color:var(--muted);font-weight:500;margin-left:6px}
   @keyframes empty{from{stroke-dashoffset:0}to{stroke-dashoffset:40.8}}
   @media (max-width:700px){.stack{left:50%}}
 </style>

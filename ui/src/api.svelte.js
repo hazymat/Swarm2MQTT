@@ -34,8 +34,10 @@ function waitingText(args) {
   return device.kind === "battery" ? `Waiting for ${device.name} to answer. It sleeps between reports: press its button to wake it.` : `Waiting for ${device.name} to answer…`;
 }
 // run a command; after 4 s say what it's waiting for; on failure show the plain-words reason as a pill
+// (changing a device's value shows its own waiting line beside the control, so no pill for that)
+const SHOWN_INLINE = ["set", "setting"];
 export async function act(name, args) {
-  let waitId = null; const slow = setTimeout(() => waitId = toast(waitingText(args), null, "wait"), 4000);
+  let waitId = null; const slow = SHOWN_INLINE.includes(name) ? null : setTimeout(() => waitId = toast(waitingText(args), null, "wait"), 4000);
   try {return await call(name, args)} catch (error) {toast(error.message, null, "bad"); throw error}
   finally {clearTimeout(slow); if (waitId) dismiss(waitId)}
 }
@@ -44,11 +46,16 @@ export const undo = () => act("undo").catch(() => {});
 export const redo = () => act("redo").catch(() => {});
 
 // Bottom pills: 6 s with an action, 1.6 s without; a problem stays 12 s with ✕, so it's never missed; "wait" stays until its command answers. A pill with `then` runs it when the doughnut runs out (for things that can't be undone for real).
+// The same words again replace the pill showing them (×2), and only the newest two show: the rest fold into "n more" (open it, or Clear).
 export function toast(label, action = undo, level = "info", then = null) {
-  const id = toastId++, ms = level === "bad" ? 12000 : level === "wait" ? 600e3 : action || then ? 6000 : 1600, item = {id, label, action, level, ms, started: Date.now(), then};
-  live.toasts = live.toasts.concat([item]).slice(-3);
+  const id = toastId++, ms = level === "bad" ? 12000 : level === "wait" ? 600e3 : action || then ? 6000 : 1600, same = live.toasts.find(item => item.label === label && item.level === level && !item.then && !then);
+  if (same) {clearTimeout(same.timer); dismiss(same.id)}
+  const item = {id, label, action, level, ms, started: Date.now(), then, times: (same?.times ?? 1) + (same ? 1 : 0)};
+  live.toasts = live.toasts.concat([item]);
   item.timer = setTimeout(() => {dismiss(id); if (then) then()}, ms);
   return id;
 }
 export function dismiss(id) {live.toasts = live.toasts.filter(item => item.id !== id)}
+// Clear: pills waiting to do something (a removal) do it now, as if their time had run out
+export function dismissAll() {for (const item of live.toasts) {clearTimeout(item.timer); if (item.then) item.then()} live.toasts = []}
 export function cancelPending(id) {const item = live.toasts.find(candidate => candidate.id === id); if (item) clearTimeout(item.timer); dismiss(id)}

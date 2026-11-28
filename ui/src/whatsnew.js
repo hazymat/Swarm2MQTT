@@ -2,6 +2,7 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 42, text: "The pills at the bottom never pile up: the same message again shows ×2 instead of a second pill, only the newest two show, and older ones fold into \"1 more\" with Clear all. Waiting pills have ✕, and changing a device's value no longer adds one, since the line under the control already says what it's waiting for."},
   {id: 41, text: "On a phone, tapping a button twice quickly, such as + next to a temperature, no longer zooms the page in. Tapping into a box doesn't zoom either. Pinching to zoom still works."},
   {id: 40, text: "A device's MQTT is now two boxes: How it's sent (topic, format, renamed values) and Sent over MQTT, the last 3 messages it sent, each like an email showing when it went and what changed. Open one to see the values, or all of them as a tree.", go: "home"},
   {id: 39, text: "When you change something on a device, your value shows at once with a pulsing dot and what it's waiting for: Sending…, then Waiting for it to confirm (was 18). It ends with ✓ Set, or says plainly what happened, like It set 19 instead or Not confirmed, with Try again. No more jumping back to the old value while the device catches up."},
