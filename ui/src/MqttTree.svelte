@@ -28,7 +28,7 @@
   const recent = path => view.now - (changedAt[path.slice(path.indexOf("/"))] ?? 0) < 4000; // "m/a/b" and "t:/a/b" both mean value /a/b
   const kind = value => value === null ? "o" : typeof value === "number" ? "n" : typeof value === "boolean" ? "b" : typeof value === "string" ? "s" : "o";
   const shown = (value, quoted) => typeof value === "string" ? (quoted ? `"${value}"` : value) : JSON.stringify(value);
-  const count = value => Array.isArray(value) ? `[${value.length}]` : `{${Object.keys(value).length}}`;
+  const count = value => {const size = Array.isArray(value) ? value.length : Object.keys(value).length; return Array.isArray(value) ? `${size} item${size === 1 ? "" : "s"}` : `${size} value${size === 1 ? "" : "s"}`};
   function copy(text, what) {navigator.clipboard?.writeText(text).then(() => toast(`${what} copied`, null)).catch(() => toast("Couldn't copy here", null, "bad"))}
   // topic levels above the device's values: base topic parts, then the device topic parts
   let levels = $derived(base.split("/").concat(device.topic.split("/")).filter(Boolean));
@@ -40,7 +40,7 @@
   <div class="row" class:flash={!nested && recent(path)} class:picked={picked === path} style="padding-left:{10 + depth * 18}px">
     <button class="main" onclick={() => nested ? toggle(path) : picked = picked === path ? null : path}>
       <span class="tw">{nested ? (isOpen(path) ? "▾" : "▸") : ""}</span><span class="key">{key}</span>{#if quoted && !nested}<span class="o">:</span>{/if}
-      {#if nested}<span class="o">{count(item)}</span>{:else}<span class={kind(item)}>{shown(item, quoted)}</span>{/if}
+      {#if nested}{#if !isOpen(path)}<span class="o">{count(item)}</span>{/if}{:else}<span class={kind(item)}>{shown(item, quoted)}</span>{/if}
     </button>
     {#if !nested && recent(path)}<span class="when">just changed</span>{/if}
     <span class="acts">{#if topicOf}<button onclick={() => copy(topicOf, "Topic")}>Copy topic</button>{/if}<button onclick={() => copy(nested ? JSON.stringify(item) : typeof item === "string" ? item : JSON.stringify(item), "Value")}>Copy value</button></span>
@@ -49,13 +49,13 @@
   {/if}
 {/snippet}
 
-<div class="tools"><input class="text find" placeholder="Find a value" bind:value={find}><button class="chip" onclick={() => setAll(true)}>Open all</button><button class="chip" onclick={() => setAll(false)}>Close all</button><button class="chip" onclick={() => copy(JSON.stringify(message, null, 2), "Message")}>Copy all</button></div>
+<div class="tools"><input class="text find" placeholder="Find a value" bind:value={find}><span class="three"><button class="chip" onclick={() => setAll(true)}>Open all</button><button class="chip" onclick={() => setAll(false)}>Close all</button><button class="chip" onclick={() => copy(JSON.stringify(message, null, 2), "Message")}>Copy all</button></span></div>
 
 <div class="tree">
   {#if device.format !== "values"}
     {#if device.format === "both"}<div class="sect">Message</div>{/if}
     <div class="row root message">
-      <button class="main" onclick={() => toggle("m")}><span class="tw">{isOpen("m") ? "▾" : "▸"}</span><span class="name">{topic}</span><span class="o">{count(message)}</span></button>
+      <button class="main" onclick={() => toggle("m")}><span class="tw">{isOpen("m") ? "▾" : "▸"}</span><span class="name">{topic}</span>{#if !isOpen("m")}<span class="o">{count(message)}</span>{/if}</button>
       {#if device.last_seen}<span class="when">{ago(device.last_seen, view.now)}</span>{/if}
       <span class="acts"><button onclick={() => copy(topic, "Topic")}>Copy topic</button><button onclick={() => copy(JSON.stringify(message), "JSON")}>Copy JSON</button></span>
     </div>
@@ -82,14 +82,16 @@
 
 <style>
   .tree{margin-top:8px;border:1px solid var(--glass-border);border-radius:12px;padding:6px 4px;background:color-mix(in srgb,var(--bg) 45%,transparent);font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;-webkit-user-select:text;user-select:text}
-  .tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}.tools .find{flex:1;min-width:140px;max-width:240px;padding:5px 10px;font-size:13.5px}.tools .chip{padding:4px 11px;font-size:13px}
+  .tools{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px}.tools .find{flex:1;min-width:140px;max-width:240px;padding:5px 10px;font-size:13.5px}.tools .chip{padding:4px 11px;font-size:13px}.three{display:flex;gap:6px}
+  @media (max-width:700px){.tools .find{max-width:none;flex-basis:100%}.three{width:100%}.three .chip{flex:1;justify-content:center}}
   .sect{font:500 12px system-ui;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;padding:8px 10px 4px}
   .row{display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:8px;min-height:28px}
   .row:hover,.row.picked{background:var(--glass)}
   .row.flash{background:color-mix(in srgb,var(--accent) 22%,transparent);transition:background .4s}
-  .main{display:flex;align-items:baseline;gap:6px;min-width:0;text-align:left;font:inherit;flex-wrap:wrap}
-  .tw{width:12px;color:var(--faint);flex:none;font-size:11px}
-  .key{color:#9cc8ff}.key.long{word-break:break-all}.name{color:var(--text);font-weight:600;word-break:break-all}
+  .main{display:block;min-width:0;flex:1;text-align:left;font:inherit;padding-left:20px;text-indent:-20px} /* a long key's value wraps under the key, not back at the edge */
+  .main > span{margin-right:6px}
+  .tw{display:inline-block;width:14px;text-indent:0;color:var(--faint);font-size:11px}
+  .key{color:#9cc8ff}.key.long{word-break:break-all}.name{color:var(--text);font-weight:600;overflow-wrap:anywhere}
   :global([data-theme=light]) .key{color:#2563eb}
   .n{color:#7ee0b8}.s{color:#ffc98a}.b{color:#d3a8ff}.o{color:var(--faint)}
   :global([data-theme=light]) .n{color:#047857}:global([data-theme=light]) .s{color:#b45309}:global([data-theme=light]) .b{color:#7c3aed}
@@ -97,5 +99,5 @@
   .when{margin-left:auto;color:var(--faint);font:12px system-ui;white-space:nowrap}
   .acts{display:none;gap:4px;margin-left:auto}.row:hover .acts,.row.picked .acts{display:inline-flex}.when + .acts{margin-left:6px}
   .acts button{white-space:nowrap;font:12px system-ui;color:var(--muted);padding:2px 8px;border:1px solid var(--glass-border);border-radius:10px;background:var(--glass)}
-  @media (hover:none),(max-width:700px){.row{flex-wrap:wrap}.row:hover:not(.picked) .acts{display:none}.row.picked .acts,.row.message .acts{display:inline-flex;flex-basis:100%;justify-content:flex-end;margin:4px 0 2px}}
+  @media (hover:none),(max-width:700px){.row{flex-wrap:wrap}.row:hover:not(.picked) .acts{display:none}.row.picked .acts,.row.message .acts{display:inline-flex;flex-basis:100%;justify-content:flex-end;margin:4px 0 2px}.row.message .main{flex:1 1 0}.row.message .when{align-self:flex-start;margin-top:2px}}
 </style>

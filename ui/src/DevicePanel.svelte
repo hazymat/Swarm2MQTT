@@ -240,7 +240,7 @@
   .small b{color:var(--text)}
   .num{width:80px}
   .half{width:55%}
-  .override{display:flex;gap:6px;align-items:center}
+  .override{display:flex;gap:6px;align-items:center}.override .link{align-self:center}
   .topic{display:flex;gap:6px;align-items:center;text-align:left}
   .code code{white-space:pre-wrap}
   .progress{height:8px;border-radius:4px;background:var(--glass);overflow:hidden}.progress i{display:block;height:100%;background:var(--blue)}
