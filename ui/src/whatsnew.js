@@ -2,6 +2,8 @@
 //   text  one plain line: what changed and where
 //   go    page for Show me; at  the element that pulses (no at: no Show me)
 export const WHATS_NEW = [
+  {id: 53, text: "Joining: a device that's recognised and sending its readings counts as joined, so it no longer shows a Didn't finish joining card while it works fine. The steps never contradict each other: a later step ticked means the earlier ones are ticked too."},
+  {id: 52, text: "Sent over MQTT: a message you've opened, or Show all values, stays open when the device sends its next message, instead of closing after a few seconds."},
   {id: 51, text: "A device's page on a computer no longer scrolls sideways: Now and On the device sit one above the other when the panel is too narrow for both. Scroll bars everywhere are thin and match the look, instead of the browser's grey ones."},
   {id: 50, text: "Adding devices: Make and model now ticks when a device says what it is (it was never ticking, though the device was recognised). A device that joined as New device takes its model's name once it's known, before you accept it."},
   {id: 49, text: "The Home Screen icon fills its whole square, with no dark line along its edges. If you added it before, remove it from your Home Screen and add it again to get the new one."},

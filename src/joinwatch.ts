@@ -28,9 +28,10 @@ export class JoinWatch {
   private touch(report: JoinReport) {report.updated = Date.now(); report.verdict = diagnose(report); this.onChange(report)}
   // only devices that joined since the app started (or are being retried) are watched
   watching(ieee: string) {return this.reports.has(ieee)}
-  step(ieee: string, step: JoinStep) {const report = this.report(ieee); if (!report.done[step]) report.done[step] = Date.now(); if (report.failing && JOIN_STEPS.indexOf(report.failing.step) <= JOIN_STEPS.indexOf(step)) report.failing = undefined; if (step === "ready") report.outcome = "ready"; this.touch(report)}
+  // a later step means the earlier ones happened, even if we didn't see them (it joined before Swarm2MQTT started, or a step went by unlogged)
+  step(ieee: string, step: JoinStep) {const report = this.report(ieee), now = Date.now(); for (const earlier of JOIN_STEPS.slice(0, JOIN_STEPS.indexOf(step) + 1)) if (!report.done[earlier]) report.done[earlier] = now; if (report.failing && JOIN_STEPS.indexOf(report.failing.step) <= JOIN_STEPS.indexOf(step)) report.failing = undefined; if (step === "ready") report.outcome = "ready"; this.touch(report)}
   fail(ieee: string, step: JoinStep, error: string) {if (!this.watching(ieee)) return; const report = this.report(ieee); report.failing = {step, error, tries: (report.failing?.step === step ? report.failing.tries : 0) + 1}; this.touch(report)}
-  failed(ieee: string, error?: string) {if (!this.watching(ieee)) return; const report = this.report(ieee); report.outcome = "failed"; const next = JOIN_STEPS.find(step => !report.done[step]) ?? "ready"; report.failing = {step: next, error: error ?? report.failing?.error ?? "no answer", tries: report.failing?.tries ?? 1}; this.touch(report)}
+  failed(ieee: string, error?: string) {if (!this.watching(ieee)) return; const report = this.report(ieee); report.outcome = "failed"; const furthest = JOIN_STEPS.reduce((last, step, index) => report.done[step] ? index : last, -1), next = JOIN_STEPS[Math.min(furthest + 1, JOIN_STEPS.length - 1)]; report.failing = {step: next, error: error ?? report.failing?.error ?? "no answer", tries: report.failing?.tries ?? 1}; this.touch(report)}
   left(ieee: string) {if (!this.watching(ieee)) return; const report = this.report(ieee); if (report.outcome !== "ready") {report.outcome = "left"; this.touch(report)}}
   heard(ieee: string, rssi?: number, lqi?: number) {
     if (!this.watching(ieee)) return; const report = this.report(ieee), signal = report.signal ?? (report.signal = {samples: 0});

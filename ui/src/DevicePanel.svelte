@@ -24,7 +24,9 @@
   let chain = $derived.by(() => {const parents = new Map(snap.links.links.map(link => [link.child, link.parent])), out = [device.ieee]; let at = device.ieee; for (let step = 0; step < 8 && parents.get(at); step++) {at = parents.get(at); out.push(at)} return out});
   // 30-day history for the strip and graphs, loaded when the panel opens
   let routes = $state([]), battery = $state([]), signal = $state([]);
-  $effect(() => {const ieee = device.ieee; call("linkHistory", {ieee}).then(result => routes = result).catch(() => {}); call("history", {ieee, key: "battery"}).then(result => battery = result).catch(() => {}); call("history", {ieee, key: "linkquality"}).then(result => signal = result).catch(() => {})});
+  // the page gets a fresh copy of the device every few seconds; work keyed on it runs only when what it depends on really changed
+  let historyFor = "";
+  $effect(() => {const ieee = device.ieee, key = ieee + "|" + device.last_seen; if (key === historyFor) return; historyFor = key; call("linkHistory", {ieee}).then(result => routes = result).catch(() => {}); call("history", {ieee, key: "battery"}).then(result => battery = result).catch(() => {}); call("history", {ieee, key: "linkquality"}).then(result => signal = result).catch(() => {})});
   const DAYS = 30, ROUTE_TINTS = ["var(--sky)", "var(--peach)", "var(--mint)", "var(--lilac)", "var(--pink)"];
   let strip = $derived.by(() => {
     const start = view.now - DAYS * 864e5, segments = [], tints = new Map();
@@ -58,7 +60,8 @@
   const isPending = control => ["sending", "waiting"].includes(pending[control.property]?.phase);
   function setValue(control, value) {act(control.setting ? "setting" : "set", control.setting ? {ieee: device.ieee, property: control.property, value} : {ieee: device.ieee, values: {[control.property]: value}}).catch(() => {})}
   let renames = $state({});
-  $effect(() => {renames = Object.assign({}, device.renames)});
+  let renamesFor = "";
+  $effect(() => {const key = device.ieee + JSON.stringify(device.renames ?? {}); if (key !== renamesFor) {renamesFor = key; renames = Object.assign({}, device.renames)}});
   let base = $derived(snap.mqtt.settings.baseTopic);
   let renamedCount = $derived(Object.values(device.renames ?? {}).filter(Boolean).length);
   let bindTarget = $state("");

@@ -151,12 +151,14 @@ export class App extends EventEmitter {
   uniqueName(base: string, except?: string) {const names = new Set(this.store.devices().filter(device => device.ieee !== except).map(device => device.name)); let name = base, count = 2; while (names.has(name)) name = `${base} ${count++}`; return name}
   uniqueTopic(base: string, except?: string) {const topics = new Set(this.store.devices().filter(device => device.ieee !== except).map(device => device.topic).concat(this.store.groups().map(group => group.topic))); let topic = base, count = 2; while (topics.has(topic) || topic === "bridge") topic = `${base}_${count++}`; return topic}
 
+  // a device that's known (model, controls) and sends readings has finished joining, whatever step the log last showed: no stuck card for a working device
+  finishedByReporting(device: DeviceRow) {const report = this.joinWatch.reports.get(device.ieee); if (!report || report.outcome === "ready" || !device.model || !device.controls.length) return; this.joinWatch.step(device.ieee, "ready"); this.log("info", `${device.name} finished joining: it's sending its readings.`, device.ieee)}
   onHeard(ieee: string) {this.retryJoin(ieee); const device = this.store.device(ieee); if (!device) return; addGap(device, Date.now()); this.store.saveDevice(device); this.availabilityChanged(device)}
   onState(ieee: string, values: Record<string, unknown>, lqi?: number, assumed = false) {
     const device = this.store.device(ieee);
     if (!device) return;
     if (lqi !== undefined) values = Object.assign({}, values, {linkquality: lqi});
-    if (!assumed) {addGap(device, Date.now()); this.checkPending(ieee, values)} // a value assumed from a command we sent isn't the device being heard
+    if (!assumed) {addGap(device, Date.now()); this.checkPending(ieee, values); this.finishedByReporting(device)} // a value assumed from a command we sent isn't the device being heard
     else {const list = this.pending.get(ieee); if (list) values = pick(values, Object.keys(values).filter(key => !list[key])); if (!Object.keys(values).length) return} // MQTT carries what the device confirmed, never what we hope
     Object.assign(device.state, values);
     this.store.saveDevice(device);

@@ -6,9 +6,9 @@
   import {ago, clock} from "./util.js";
   import MqttTree from "./MqttTree.svelte";
   let {device, base} = $props();
-  let sent = $state([]), open = $state(0), whole = $state(-1);
-  $effect(() => {const ieee = device.ieee, _ = device.lastSent; call("sent", {ieee}).then(result => sent = result).catch(() => {})});
-  $effect(() => {const _ = device.ieee; open = 0; whole = -1});
+  // what's open is remembered by the message's time, not its place: a new message arriving (every few seconds) leaves it open
+  let sent = $state([]), openTs = $state(null), wholeTs = $state(null), shownFor = "";
+  $effect(() => {const ieee = device.ieee, _ = device.lastSent; call("sent", {ieee}).then(result => {if (ieee !== shownFor) {shownFor = ieee; openTs = result[0]?.ts ?? null; wholeTs = null} sent = result}).catch(() => {})});
   const same = (one, other) => JSON.stringify(one) === JSON.stringify(other);
   const shown = value => typeof value === "string" ? `"${value}"` : JSON.stringify(value);
   const kind = value => value === null || typeof value === "object" ? "o" : typeof value === "number" ? "n" : typeof value === "boolean" ? "b" : "s";
@@ -32,19 +32,19 @@
       {#each entries as entry, index (entry.message.ts)}
         <li class:latest={index === 0}>
           <div class="card">
-            <button class="head" aria-expanded={open === index} onclick={() => {open = open === index ? -1 : index; whole = -1}}>
-              <span class="line"><span class="tw" aria-hidden="true">{open === index ? "▾" : "▸"}</span><b>Sent {ago(entry.message.ts, view.now)}</b><span class="faint">{clock(entry.message.ts)}</span><span class="faint size">{entry.words}</span></span>
+            <button class="head" aria-expanded={openTs === entry.message.ts} onclick={() => {openTs = openTs === entry.message.ts ? null : entry.message.ts; wholeTs = null}}>
+              <span class="line"><span class="tw" aria-hidden="true">{openTs === entry.message.ts ? "▾" : "▸"}</span><b>Sent {ago(entry.message.ts, view.now)}</b><span class="faint">{clock(entry.message.ts)}</span><span class="faint size">{entry.words}</span></span>
               <span class="summary">{entry.summary}</span>
               <code class="faint">{entry.message.topic}{entry.message.format === "values" ? "/…" : ""}{entry.message.format === "both" ? " and one topic per value" : ""}</code>
             </button>
-            {#if open === index}
+            {#if openTs === entry.message.ts}
               <div class="inside">
-                {#if whole === index}<MqttTree {device} {base} message={entry.message.message}/>
+                {#if wholeTs === entry.message.ts}<MqttTree {device} {base} message={entry.message.message}/>
                 {:else}
                   {#each entry.changed as item}<div class="val changed"><span class="key">{item.key}</span><span class={kind(item.value)}>{shown(item.value)}</span><span class="was">was {item.was === undefined ? "not sent" : shown(item.was)}</span></div>{/each}
                   {#each entry.unchanged.slice(0, entry.changed.length ? 3 : 6) as item}<div class="val"><span class="key">{item.key}</span><span class={kind(item.value)}>{shown(item.value)}</span></div>{/each}
                 {/if}
-                <div class="acts">{#if whole !== index}<button class="chip" onclick={() => whole = index}>Show all {entry.words}</button>{:else}<button class="chip" onclick={() => whole = -1}>Show what changed</button>{/if}<button class="chip" onclick={() => copy(entry.message)}>Copy message</button></div>
+                <div class="acts">{#if wholeTs !== entry.message.ts}<button class="chip" onclick={() => wholeTs = entry.message.ts}>Show all {entry.words}</button>{:else}<button class="chip" onclick={() => wholeTs = null}>Show what changed</button>{/if}<button class="chip" onclick={() => copy(entry.message)}>Copy message</button></div>
               </div>
             {/if}
           </div>

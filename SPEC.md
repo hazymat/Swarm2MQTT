@@ -152,6 +152,7 @@ Applied here:
 - Firmware update offer appears here when available (replaces Z2M's OTA page).
 
 ### 3.4 Add devices
+- **The software clears what it can see is fine:** a device that is recognised and sending readings has finished joining, whatever step the log last showed; a later step ticked means the earlier ones happened. Problems are pre-empted and fixed by Swarm2MQTT where it can (joining skips plugs with a bad link), not left to the user.
 - Button turns into a ring counting down 4 minutes, with a Stop button.
 - **Beacon:** while open, the adapter and every listening router pulse with expanding rings on the map, and the header pill pulses too, so it's visible from any page. Click a router to stop it listening (replaces the "(All)" dropdown).
 - **Helper** under the countdown, always shown while open: "While this is on, any device nearby can join and is handed your network key, including a neighbour's. Turn it off once your device is in."
