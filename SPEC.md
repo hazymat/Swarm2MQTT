@@ -134,6 +134,7 @@ Applied here:
 - **Rewind:** ◀ ▶ under the map hop to the previous or next mesh change, with its time. **Compare** overlays that moment on now: routes that went are dashed, new ones solid with a halo. Route discovery listens to normal traffic and rejoins, plus a full scan every 6 hours and on demand.
 - **Route switches live:** the line slides to the new router and a faint dashed ghost of the old route fades over a day. Clicking the ghost says what changed and when.
 - **Right: list.** Picture, name, signal bars, battery, last heard. Sorted problems-first. Search box. Clicking a row highlights it on the map and vice versa.
+- **View menu (the eye):** Layout List / Tiles / Cards, Detail Compact / Expanded, At a glance strip, Group by Nothing / Kind of device / Needs a look first, Sort by Name / Last heard / Weakest signal / Lowest battery, Show on each device (battery, last heard, signal, make and model, talks through), Look Dark / Light. Remembered per browser. What each device shows comes from what it can do, never its model: a heating setpoint = valve (room temperature, target with − +, mode), occupancy/presence = motion (someone there, since, last movement, last hour or today as bars), temperature = climate (with humidity, last day as a line), on/off = plug or light (power, switch), contact = door. Its own controls work in place with the same pending marks as the panel.
 - **Bottom/side: device panel** for the selected device (3.3).
 - **Header:** network status pill ("All good" / "2 need a look"), Add devices button.
 

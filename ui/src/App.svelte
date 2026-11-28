@@ -16,6 +16,8 @@
   import WhatsNew from "./WhatsNew.svelte";
   import {LATEST_ID} from "./whatsnew.js";
   import {call} from "./api.svelte.js";
+  import ViewMenu from "./ViewMenu.svelte";
+  let viewMenu = $state(false);
 
   const PAGES = {home: {label: "Home", icon: "home", tint: "var(--peach)"}, groups: {label: "Groups", icon: "groups", tint: "var(--mint)"}, activity: {label: "Activity", icon: "activity", tint: "var(--sky)"}, settings: {label: "Settings", icon: "settings", tint: "var(--lilac)"}};
   let snap = $derived(live.snap);
@@ -71,7 +73,7 @@
       <h1 id="page-title"><Icon name={PAGES[view.page]?.icon ?? "home"}/>{PAGES[view.page]?.label ?? "Home"}</h1>
       {#if status}<button class="chip status" onclick={statusClick} title="Show what this is about"><span class="dot" class:pulse={status.pulse} style="background:{status.colour}"></span><b>{status.text}</b>{#if status.sub}<span class="sub">· {status.sub}</span>{/if}</button>{/if}
       {#if snap.join.endsAt > view.now}<JoinPill/>{/if}
-      <button class="iconbtn" title="Light or dark" onclick={() => {view.theme = view.theme === "light" ? "glass" : "light"; save("s2m-theme", view.theme)}}><Icon name="eye"/></button>
+      <button class="iconbtn" class:on={viewMenu} title="View" aria-expanded={viewMenu} onclick={() => viewMenu = !viewMenu}><Icon name="eye"/></button>
       {#if view.page === "home" && !(snap.join.endsAt > view.now)}<button class="plus" title="Add devices (J)" disabled={!snap.radio.up} onclick={() => act("join", {seconds: 240})}><Icon name="plus"/></button>{/if}
       {#if view.page === "groups"}<button class="plus" title="New group" onclick={() => act("groupCreate", {name: "New group", members: view.chosen})}><Icon name="plus"/></button>{/if}
     </header>
@@ -86,6 +88,7 @@
   </div>
   <Toasts/>
   <UpdateBar inset/>
+  {#if viewMenu}<ViewMenu onclose={() => viewMenu = false}/>{/if}
 {/if}
 {#if snap}<StatusBar/>{/if}
 {#if snap && view.whatsNew}<WhatsNew/>{/if}
@@ -106,6 +109,7 @@
   .status .sub{color:var(--muted)}
   .pulse{animation:pulse 1.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.3}}
   .plus:disabled{opacity:.4}
+  .iconbtn.on{background:var(--active-bg);border:1px solid var(--active-border);color:var(--text)}
   .homehint{display:flex;align-items:center;gap:10px;margin:10px 16px 0;padding:9px 12px;font-size:14px;background:var(--glass);border:1px solid var(--active-border);border-radius:12px}.homehint span{flex:1}.homehint .x{padding:2px;color:var(--muted)}
   .simbar{padding:6px 24px;font-size:13px;color:var(--muted);background:color-mix(in srgb,var(--lilac) 12%,transparent);border-bottom:1px solid var(--glass-border)}
   .content{flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto}

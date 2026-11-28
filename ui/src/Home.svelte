@@ -8,6 +8,9 @@
   import DevicePanel from "./DevicePanel.svelte";
   import JoinBox from "./JoinBox.svelte";
   import GettingRunning from "./GettingRunning.svelte";
+  import DeviceItem from "./DeviceItem.svelte";
+  import Glance from "./Glance.svelte";
+  import {summaryOf, KINDS} from "./summary.js";
 
   let snap = $derived(live.snap), notRunning = $derived(!snap.sim && !snap.radio.up);
   let devices = $derived(snap.devices);
@@ -19,7 +22,20 @@
   });
   const upstreamText = device => {const weak = deviceBars(device, snap.stickIeee) >= 3 ? weakUpstream(device, devices, snap.stickIeee) : null; return weak ? `Strong to ${devices.find(other => other.ieee === device.parent)?.name}, ${HOP_WORDS[weak.hop.bars].toLowerCase()} from ${weak.device.name} on` : ""};
   let order = {bad: 0, warn: 1, waiting: 2, new: 3, ok: 4};
-  let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.note ?? "") + " " + (device.vendor ?? "") + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => order[first.health.status] - order[second.health.status] || first.name.localeCompare(second.name)));
+  // the list as picked in the View menu: sorted, then grouped
+  const SORT = {name: () => 0, heard: (first, second) => (second.last_seen ?? 0) - (first.last_seen ?? 0), signal: (first, second) => deviceBars(first, snap.stickIeee) - deviceBars(second, snap.stickIeee), battery: (first, second) => (first.health.battery?.percent ?? 101) - (second.health.battery?.percent ?? 101)};
+  let accepted = $derived(devices.filter(device => device.status === "accepted").filter(device => !view.search || (device.name + " " + (device.note ?? "") + " " + (device.vendor ?? "") + " " + (device.description ?? "") + " " + (device.model ?? "")).toLowerCase().includes(view.search.toLowerCase())).sort((first, second) => (SORT[view.list.sort] ?? SORT.name)(first, second) || first.name.localeCompare(second.name)));
+  let sections = $derived.by(() => {
+    const group = view.list.group;
+    if (group === "kind") {
+      const byKind = new Map(Object.keys(KINDS).map(kind => [kind, []]));
+      for (const device of accepted) byKind.get(summaryOf(device).kind).push(device);
+      return Array.from(byKind).filter(([, items]) => items.length).map(([kind, items]) => {const summaries = items.map(summaryOf), heating = summaries.filter(summary => summary.heating).length, seen = summaries.filter(summary => summary.kind === "motion" && summary.on).length; return {key: kind, label: KINDS[kind], items, count: kind === "heating" && heating ? `${items.length} · ${heating} heating` : kind === "motion" && seen ? `${items.length} · ${seen} ${seen === 1 ? "sees" : "see"} someone` : String(items.length)}});
+    }
+    const look = group === "needs" ? accepted.filter(device => device.health.status !== "ok").sort((first, second) => order[first.health.status] - order[second.health.status]) : [];
+    if (!look.length) return [{key: "all", label: "", items: accepted}];
+    return [{key: "needs", label: "Needs a look", items: look, count: String(look.length)}, {key: "rest", label: "Everything else", items: accepted.filter(device => device.health.status === "ok"), count: String(accepted.length - look.length)}].filter(section => section.items.length);
+  });
   let waiting = $derived(devices.filter(device => device.status === "waiting"));
   let joining = $derived(snap.join.endsAt > view.now);
   let tab = $state("list"); // phone only: Devices | Map
@@ -102,21 +118,11 @@
         </div>
       {/if}
       <div class="searchrow"><Icon name="search" small/><input id="search" class="text" placeholder="Search devices" bind:value={view.search}><kbd>/</kbd></div>
-      <div class="rows">
-        {#each accepted as device (device.ieee)}
-          {@const handlers = holdable(() => hold(device.ieee), () => pick(device.ieee))}
-          <button class="row" class:chosen={view.chosen.includes(device.ieee)} class:open={view.open === device.ieee} onpointerdown={handlers.onpointerdown} onpointermove={handlers.onpointermove} onpointerup={handlers.onpointerup} onpointerleave={handlers.onpointerleave} oncontextmenu={handlers.oncontextmenu}>
-            <Pic {device}/>
-            <span class="main">
-              <span class="name">{device.name}{#if device.health.status !== "ok"}<span class="dot" style="background:{STATUS_COLOUR[device.health.status]}"></span>{/if}</span>
-              <span class="sub">{device.health.reason ?? (upstreamText(device) || device.note || makeModel(device))}</span>
-            </span>
-            <span class="meta">
-              {#if device.health.battery}<span title="Battery">{device.health.battery.percent}%</span>{/if}
-              <span class="bars" title={device.rssi != null ? `Signal ${device.rssi} dBm` : "Signal"}>{#each [1, 2, 3, 4] as bar}<b class:on={bar <= deviceBars(device, snap.stickIeee)} style="height:{bar * 3 + 1}px"></b>{/each}</span>
-              <span class="seen">{ago(device.last_seen, view.now)}</span>
-            </span>
-          </button>
+      {#if view.list.glance}<Glance devices={accepted}/>{/if}
+      <div class="rows {view.list.layout}">
+        {#each sections as section (section.key)}
+          {#if section.label}<div class="sect"><span>{section.label}</span><span>{section.count}</span></div>{/if}
+          {#each section.items as device (device.ieee)}<DeviceItem {device} {devices} stickIeee={snap.stickIeee} layout={view.list.layout} detail={view.list.detail} show={view.list.show} upstream={upstreamText(device)} onpick={pick} onhold={hold}/>{/each}
         {/each}
         {#if !accepted.length && !waiting.length}<div class="empty"><span>No devices yet.</span><button class="pill primary" disabled={!snap.radio.up} onclick={() => act("join", {seconds: 240})}>Add devices<kbd>J</kbd></button></div>{/if}
       </div>
@@ -157,6 +163,10 @@
   .waiting h3{font-size:14px;font-weight:500}
   .searchrow{display:flex;align-items:center;gap:8px;color:var(--muted)}
   .rows{display:flex;flex-direction:column;gap:8px}
+  .rows.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+  .rows.cards{gap:10px}
+  .sect{grid-column:1/-1;display:flex;justify-content:space-between;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-top:6px}
+  .rows .empty{grid-column:1/-1}
   .row{display:flex;align-items:center;gap:14px;padding:10px 12px;background:var(--glass);border:1px solid var(--glass-border);border-radius:14px;text-align:left;width:100%;touch-action:pan-y}
   .row:hover{background:var(--glass-hover)}
   .row.open{background:var(--glass-hover)}

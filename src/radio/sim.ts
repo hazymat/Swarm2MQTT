@@ -9,6 +9,8 @@ const occupancy: Control = {property: "occupancy", label: "Motion", type: "binar
 const sensitivity: Control = {property: "sensitivity", label: "Sensitivity", help: "How sensitive it is to presence", type: "enum", writable: true, readable: true, values: ["low", "medium", "high"], setting: true};
 const keepTime: Control = {property: "keep_time", label: "Hold for", help: "Seconds it keeps saying occupied after the last movement", type: "enum", writable: true, readable: true, values: ["30", "60", "120"], setting: true};
 const temperature: Control = {property: "temperature", label: "Temperature", type: "numeric", writable: false, readable: true, unit: "°C"};
+const humidity: Control = {property: "humidity", label: "Humidity", type: "numeric", writable: false, readable: true, unit: "%"};
+const trvControls: Control[] = [{property: "local_temperature", label: "Temperature", help: "Measured at the valve.", type: "numeric", readable: true, writable: false, unit: "°C"}, {property: "occupied_heating_setpoint", label: "Target temperature", type: "numeric", readable: true, writable: true, unit: "°C", min: 4, max: 35, step: 0.5}, {property: "system_mode", label: "Mode", type: "enum", readable: true, writable: true, values: ["off", "auto", "heat"]}, {property: "running_state", label: "Running", type: "enum", readable: true, writable: false, values: ["idle", "heat"]}, {property: "local_temperature_calibration", label: "Temperature correction", help: "The valve sits by the radiator, so it often reads warmer than the room. Lower this if the room ends up cooler than you set.", type: "numeric", readable: true, writable: true, unit: "°C", min: -12.7, max: 12.7, step: 0.2, setting: true}, battery];
 const contact: Control = {property: "contact", label: "Closed", type: "binary", writable: false, readable: true, on: true, off: false};
 
 interface SimDevice extends RadioDevice {parent: string; state: Record<string, unknown>; every: number; lqi: number; off?: boolean}
@@ -31,8 +33,9 @@ export class SimRadio extends Radio {
       make("0xa4c1380000000105", "battery", "ZG-204ZL", "Tuya", "Human presence sensor", [occupancy, battery, sensitivity, keepTime], "0xa4c1380000000101", {occupancy: false, battery: 88, sensitivity: "medium", keep_time: "30"}, 600, 180),
       make("0xa4c1380000000106", "battery", "ZG-204ZL", "Tuya", "Human presence sensor", [occupancy, battery, sensitivity, keepTime], "0xa4c1380000000102", {occupancy: false, battery: 4, sensitivity: "medium", keep_time: "30"}, 600, 92),
       make("0x00158d0000000107", "battery", "MCCGQ11LM", "Aqara", "Door and window sensor", [contact, battery], "0xa4c1380000000101", {contact: true, battery: 95}, 3000, 120),
-      make("0x00158d0000000108", "battery", "WSDCGQ11LM", "Aqara", "Temperature and humidity sensor", [temperature, battery], "0x000b57fffe000103", {temperature: 20.5, battery: 56}, 900, 110),
+      make("0x00158d0000000108", "battery", "WSDCGQ11LM", "Aqara", "Temperature and humidity sensor", [temperature, humidity, battery], "0x000b57fffe000103", {temperature: 20.5, humidity: 56, battery: 56}, 900, 110),
       make("0xa4c1380000000109", "battery", "ZG-204ZL", "Tuya", "Human presence sensor", [occupancy, battery, sensitivity, keepTime], "0xa4c1380000000104", {occupancy: false, battery: 64, sensitivity: "high", keep_time: "60"}, 600, 100),
+      make("0x84fd27fffe00010a", "battery", "TRVZB", "SONOFF", "Zigbee thermostatic radiator valve", trvControls, "0xa4c1380000000102", {local_temperature: 19.4, occupied_heating_setpoint: 21, system_mode: "heat", running_state: "heat", local_temperature_calibration: 0, battery: 79}, 600, 150),
     ];
   }
   async start() {
@@ -45,6 +48,9 @@ export class SimRadio extends Radio {
     if (device.off || this.cutOff(device)) return;
     if ("occupancy" in device.state) device.state.occupancy = Math.random() < .3;
     if ("temperature" in device.state) device.state.temperature = Math.round((20 + Math.random() * 2) * 10) / 10;
+    if ("humidity" in device.state) device.state.humidity = Math.round(50 + Math.random() * 10);
+    // a valve warms the room towards its target while it heats
+    if ("local_temperature" in device.state) {const room = device.state.local_temperature as number, target = device.state.occupied_heating_setpoint as number, heating = device.state.system_mode !== "off" && room < target - .2; device.state.running_state = heating ? "heat" : "idle"; device.state.local_temperature = Math.round((room + (heating ? .3 : -.1) + (Math.random() - .5) * .1) * 10) / 10}
     if ("power" in device.state && device.state.state === "ON") device.state.power = Math.round(Math.random() * 60 * 10) / 10;
     if ("battery" in device.state && Math.random() < .05) device.state.battery = Math.max(0, (device.state.battery as number) - 1);
     this.emit("state", device.ieee, Object.assign({}, device.state), device.lqi);
@@ -104,7 +110,7 @@ export class SimRadio extends Radio {
   async reinterview(ieee: string) {
     const device = this.halfJoined.get(ieee); if (!device) return; this.emit("interview", ieee, "started");
     await new Promise(resolve => setTimeout(resolve, 1500));
-    Object.assign(device, {model: "TRVZB", vendor: "SONOFF", description: "Zigbee thermostatic radiator valve", supported: true, controls: [{property: "local_temperature", label: "Temperature", help: "Measured at the valve.", type: "numeric", readable: true, writable: false, unit: "°C"}, {property: "occupied_heating_setpoint", label: "Target temperature", type: "numeric", readable: true, writable: true, unit: "°C", min: 4, max: 35, step: 0.5}, {property: "local_temperature_calibration", label: "Temperature correction", help: "The valve sits by the radiator, so it often reads warmer than the room. Lower this if the room ends up cooler than you set.", type: "numeric", readable: true, writable: true, unit: "°C", min: -12.7, max: 12.7, step: 0.2, setting: true}], interviewing: false, state: {local_temperature: 19.5, occupied_heating_setpoint: 20, local_temperature_calibration: -0.1, battery: 100}});
+    Object.assign(device, {model: "TRVZB", vendor: "SONOFF", description: "Zigbee thermostatic radiator valve", supported: true, controls: trvControls, interviewing: false, state: {local_temperature: 19.5, occupied_heating_setpoint: 20, local_temperature_calibration: -0.1, battery: 100}});
     this.halfJoined.delete(ieee); this.emit("signal", ieee, -79, 96); this.emit("joinStep", ieee, "identified"); this.emit("joinStep", ieee, "ready"); this.emit("interview", ieee, "successful");
   }
   async scanLinks(progress: (step: ScanProgress) => void = () => {}): Promise<Link[]> {

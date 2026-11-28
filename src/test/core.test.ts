@@ -104,7 +104,7 @@ test("end to end with the simulator: MQTT out and in, holding area, undo, heartb
     await until(() => seen.get("s2m/bridge/state") === '{"state":"online"}');
     await until(() => seen.has("s2m/bridge/tele"));
     assert.equal(JSON.parse(seen.get("s2m/bridge/tele")!).adapter, "up");
-    await until(() => app.store.devices().length === 9);
+    await until(() => app.store.devices().length === 10);
     // map: a route note from normal traffic moves a device at once; a plug that misses a check keeps the routes through it, marked as seen earlier
     const stick = (app.radio as any).stick, door = "0x00158d0000000107", climate = "0x00158d0000000108";
     await app.scanNow();
